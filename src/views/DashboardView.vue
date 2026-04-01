@@ -1,24 +1,50 @@
 <template>
-  <div>
-    <h1>Dashboard GrowHub</h1>
 
-    <h3>Gestión del huerto</h3>
+<div>
 
-    <router-link to="/huertos">
-      🌱 Gestionar Huertos
-    </router-link>
+<h1>Dashboard GrowHub</h1>
 
-    <br><br>
+<div class="cards">
 
-    <router-link to="/plantas">
-      🌿 Gestionar Plantas
-    </router-link>
-
-    <br><br>
-
-    <router-link to="/sensores">
-      📡 Ver Sensores
-    </router-link>
-
+  <div class="card">
+    🌱
+    <h3>Huertos</h3>
+    <p>3 activos</p>
   </div>
+
+  <div class="card">
+    🌿
+    <h3>Plantas</h3>
+    <p>12 registradas</p>
+  </div>
+
+  <div class="card">
+    📡
+    <h3>Sensores</h3>
+    <p>4 conectados</p>
+  </div>
+
+</div>
+
+</div>
+
 </template>
+
+<style>
+
+.cards{
+display:flex;
+gap:20px;
+margin-top:30px;
+}
+
+.card{
+background:white;
+padding:30px;
+border-radius:10px;
+box-shadow:0 4px 10px rgba(0,0,0,0.1);
+width:200px;
+text-align:center;
+}
+
+</style>
