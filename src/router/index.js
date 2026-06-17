@@ -5,6 +5,7 @@ import RegisterView from '../views/RegisterView.vue'
 import ForgotPasswordView from '../views/ForgotPasswordView.vue'
 import DashboardView from '../views/DashboardView.vue'
 import ProfileView from '../views/ProfileView.vue'
+import SettingsView from '../views/SettingsView.vue'
 import MainLayout from '../layouts/MainLayout.vue'
 import { waitForAuth } from '../composables/useAuth'
 
@@ -14,6 +15,8 @@ const OrchardDetailView = () => import('../views/OrchardDetailView.vue')
 const OrchardSettingsView = () => import('../views/OrchardSettingsView.vue')
 const OrchardSensorsView = () => import('../views/OrchardSensorsView.vue')
 const OrchardTasksView = () => import('../views/OrchardTasksView.vue')
+const GlobalTasksView = () => import('../views/GlobalTasksView.vue')
+const GlobalSensorsView = () => import('../views/GlobalSensorsView.vue')
 
 const routes = [
   { path: '/login', component: LoginView, meta: { requiresGuest: true } },
@@ -30,6 +33,9 @@ const routes = [
     children: [
       { path: '', redirect: '/dashboard' },
       { path: 'dashboard', component: DashboardView },
+      { path: 'tasks', component: GlobalTasksView },
+      { path: 'sensors', component: GlobalSensorsView },
+      { path: 'settings', component: SettingsView },
       { path: 'profile', component: ProfileView },
       { path: 'orchard/:id', component: OrchardDetailView },
       { path: 'orchard/:id/settings', component: OrchardSettingsView },

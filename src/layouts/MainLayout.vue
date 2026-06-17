@@ -1,15 +1,19 @@
 <template>
   <div class="layout">
-    <aside class="sidebar">
-      <h2>GrowHub 🌱</h2>
+    <button class="menu-toggle" @click="open = !open" aria-label="Menú">☰</button>
 
-      <nav>
-        <router-link to="/dashboard">Mis Huertos</router-link>
-        <router-link to="/profile">Mi perfil</router-link>
+    <aside class="sidebar" :class="{ open }">
+      <div class="brand">GrowHub 🌱</div>
+
+      <nav @click="open = false">
+        <router-link to="/dashboard"><span class="ic">🌱</span> Mis Huertos</router-link>
+        <router-link to="/tasks"><span class="ic">✅</span> Tareas</router-link>
+        <router-link to="/sensors"><span class="ic">📡</span> Sensores</router-link>
+        <router-link to="/settings"><span class="ic">⚙️</span> Ajustes</router-link>
       </nav>
 
       <div class="sidebar-foot">
-        <router-link to="/profile" class="user-chip">
+        <router-link to="/profile" class="user-chip" @click="open = false">
           <span class="avatar">
             <img v-if="user?.photoURL" :src="user.photoURL" alt="" />
             <span v-else>{{ initial }}</span>
@@ -23,6 +27,8 @@
       </div>
     </aside>
 
+    <div v-if="open" class="overlay" @click="open = false"></div>
+
     <main class="content">
       <router-view />
     </main>
@@ -30,13 +36,14 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { logoutUser } from '../services/authService'
 import { useAuth } from '../composables/useAuth'
 
 const router = useRouter()
 const { user } = useAuth()
+const open = ref(false)
 
 const initial = computed(() =>
   (user.value?.displayName || user.value?.email || '?').charAt(0).toUpperCase(),
@@ -54,35 +61,50 @@ async function logout() {
   min-height: 100vh;
 }
 .sidebar {
-  width: 230px;
-  background: #2f3e46;
-  color: white;
-  padding: 20px;
+  width: 240px;
+  background: var(--color-sidebar);
+  color: #e2e8f0;
+  padding: 22px 16px;
   display: flex;
   flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
 }
-.sidebar h2 {
-  margin: 0 0 24px;
+.brand {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #fff;
+  padding: 0 8px 22px;
 }
-.sidebar nav {
+nav {
   display: flex;
   flex-direction: column;
+  gap: 4px;
   flex: 1;
 }
-.sidebar a {
+nav a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   color: #cbd5e1;
-  margin: 6px 0;
-  padding: 8px 10px;
-  border-radius: 6px;
+  padding: 11px 12px;
+  border-radius: var(--radius-sm);
   text-decoration: none;
+  font-weight: 500;
+  font-size: 0.95rem;
+  transition: background 0.15s, color 0.15s;
 }
-.sidebar a:hover {
-  color: white;
-  background: rgba(255, 255, 255, 0.08);
+nav a .ic {
+  font-size: 1.05rem;
 }
-.sidebar a.router-link-active {
-  color: white;
-  background: rgba(74, 144, 217, 0.35);
+nav a:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.07);
+}
+nav a.router-link-active {
+  color: #fff;
+  background: var(--color-primary);
 }
 .sidebar-foot {
   border-top: 1px solid rgba(255, 255, 255, 0.12);
@@ -96,7 +118,7 @@ async function logout() {
   align-items: center;
   gap: 10px;
   padding: 6px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   text-decoration: none;
 }
 .user-chip:hover {
@@ -106,7 +128,7 @@ async function logout() {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: #4a90d9;
+  background: var(--color-primary);
   color: white;
   display: flex;
   align-items: center;
@@ -144,17 +166,61 @@ async function logout() {
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.25);
   color: #e2e8f0;
-  padding: 8px;
-  border-radius: 6px;
+  padding: 9px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 0.85rem;
+  font-weight: 500;
 }
 .logout:hover {
   background: rgba(255, 255, 255, 0.08);
 }
 .content {
   flex: 1;
-  padding: 30px;
-  background: #f5f7fa;
+  padding: 32px 36px;
+  max-width: 1200px;
+}
+.menu-toggle {
+  display: none;
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 30;
+  width: 42px;
+  height: 42px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-sidebar);
+  color: white;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+.overlay {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .menu-toggle {
+    display: block;
+  }
+  .sidebar {
+    position: fixed;
+    z-index: 40;
+    left: -260px;
+    transition: left 0.25s ease;
+  }
+  .sidebar.open {
+    left: 0;
+  }
+  .overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 35;
+  }
+  .content {
+    padding: 70px 18px 24px;
+  }
 }
 </style>

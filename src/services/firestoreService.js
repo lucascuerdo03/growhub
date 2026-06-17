@@ -17,14 +17,14 @@ import { db } from '../firebase'
 /* ----------------------------- Huertos ----------------------------- */
 
 // Lista los huertos que pertenecen al usuario dado.
+// Solo filtramos por ownerId y ordenamos en el cliente para no exigir
+// un índice compuesto de Firestore (where + orderBy).
 export const getHuertos = async (uid) => {
-  const q = query(
-    collection(db, 'orchards'),
-    where('ownerId', '==', uid),
-    orderBy('createdAt', 'desc'),
-  )
+  const q = query(collection(db, 'orchards'), where('ownerId', '==', uid))
   const snap = await getDocs(q)
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
 }
 
 export const createHuerto = async (uid, { nombre, descripcion = '' }) => {
@@ -151,3 +151,36 @@ export const updateTarea = (orchardId, taskId, data) =>
 
 export const deleteTarea = (orchardId, taskId) =>
   deleteDoc(doc(db, 'orchards', orchardId, 'tasks', taskId))
+
+/* ----------------------- Agregados globales ------------------------ */
+// Datos de TODOS los huertos del usuario, para las secciones globales
+// (Tareas / Sensores) accesibles sin entrar en un huerto concreto.
+
+export const getAllTareas = async (uid) => {
+  const huertos = await getHuertos(uid)
+  const listas = await Promise.all(
+    huertos.map(async (h) => {
+      const tareas = await getTareas(h.id)
+      return tareas.map((t) => ({ ...t, orchardId: h.id, orchardNombre: h.nombre }))
+    }),
+  )
+  return listas.flat()
+}
+
+export const getAllSensores = async (uid) => {
+  const huertos = await getHuertos(uid)
+  const listas = await Promise.all(
+    huertos.map(async (h) => {
+      const sensores = await getSensores(h.id)
+      return Promise.all(
+        sensores.map(async (s) => ({
+          ...s,
+          orchardId: h.id,
+          orchardNombre: h.nombre,
+          lecturas: await getLecturas(h.id, s.id),
+        })),
+      )
+    }),
+  )
+  return listas.flat()
+}
