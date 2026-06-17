@@ -20,14 +20,17 @@
     <div v-else class="sensor-grid">
       <div v-for="s in sensores" :key="s.id" class="sensor-card">
         <header>
-          <div>
+          <span class="icon-box" :style="{ background: SENSOR_TYPES[s.tipo]?.tint }">
+            {{ SENSOR_TYPES[s.tipo]?.icon }}
+          </span>
+          <div class="meta">
+            <span class="label">{{ SENSOR_TYPES[s.tipo]?.label }}</span>
             <h3>{{ s.nombre }}</h3>
-            <span class="tipo">{{ SENSOR_TYPES[s.tipo]?.label }} ({{ s.unidad }})</span>
           </div>
           <button class="del" title="Eliminar" @click="remove(s.id)">✕</button>
         </header>
 
-        <div class="value">
+        <div class="value" :style="{ color: SENSOR_TYPES[s.tipo]?.color }">
           <template v-if="lastValue(s)">
             {{ lastValue(s) }}<small>{{ s.unidad }}</small>
           </template>
@@ -199,26 +202,43 @@ h1 {
 }
 .sensor-card header {
   display: flex;
-  justify-content: space-between;
   align-items: flex-start;
+  gap: 14px;
+}
+.icon-box {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}
+.meta {
+  flex: 1;
+  min-width: 0;
+}
+.label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-soft);
 }
 .sensor-card h3 {
-  margin: 0;
-}
-.tipo {
-  font-size: 0.8rem;
-  color: #6b7280;
+  margin: 2px 0 0;
 }
 .value {
-  font-size: 2rem;
-  font-weight: 700;
-  color: #1f2937;
-  margin: 8px 0 12px;
+  font-size: 2.1rem;
+  font-weight: 800;
+  margin: 12px 0;
 }
 .value small {
   font-size: 1rem;
-  color: #6b7280;
+  color: var(--color-text-soft);
   margin-left: 4px;
+  font-weight: 600;
 }
 .sim {
   margin-top: 12px;

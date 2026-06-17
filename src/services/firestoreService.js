@@ -27,10 +27,12 @@ export const getHuertos = async (uid) => {
     .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
 }
 
-export const createHuerto = async (uid, { nombre, descripcion = '' }) => {
+export const createHuerto = async (uid, { nombre, descripcion = '', lat = null, lng = null }) => {
   const ref = await addDoc(collection(db, 'orchards'), {
     nombre,
     descripcion,
+    lat,
+    lng,
     ownerId: uid,
     createdAt: serverTimestamp(),
   })

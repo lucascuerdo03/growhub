@@ -188,11 +188,15 @@ onMounted(load)
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  background: var(--color-surface);
-  padding: 14px 18px;
+  background: #f0f7ff;
+  border: 1px solid #dbeafe;
+  padding: 15px 18px;
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-card);
-  margin-bottom: 10px;
+  margin-bottom: 12px;
+}
+.list li.done {
+  background: var(--color-surface);
+  border-color: var(--color-border-soft);
 }
 .list li.done .info strong {
   text-decoration: line-through;

@@ -217,11 +217,15 @@ h1 {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  background: white;
-  padding: 14px 18px;
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  margin-bottom: 10px;
+  background: #f0f7ff;
+  border: 1px solid #dbeafe;
+  padding: 15px 18px;
+  border-radius: var(--radius-md);
+  margin-bottom: 12px;
+}
+.list li.done {
+  background: #fff;
+  border-color: #f1f5f9;
 }
 .list li.done .info strong {
   text-decoration: line-through;

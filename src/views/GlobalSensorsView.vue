@@ -25,16 +25,19 @@
     <div v-else class="sensor-grid">
       <div v-for="s in sensores" :key="s.orchardId + s.id" class="sensor-card">
         <header>
-          <div>
+          <span class="icon-box" :style="{ background: SENSOR_TYPES[s.tipo]?.tint }">
+            {{ SENSOR_TYPES[s.tipo]?.icon }}
+          </span>
+          <div class="meta">
+            <span class="label">{{ SENSOR_TYPES[s.tipo]?.label }}</span>
             <h3>{{ s.nombre }}</h3>
             <router-link :to="`/orchard/${s.orchardId}`" class="orchard-link">
               🌱 {{ s.orchardNombre }}
             </router-link>
           </div>
-          <span class="tipo">{{ SENSOR_TYPES[s.tipo]?.label }}</span>
         </header>
 
-        <div class="value">
+        <div class="value" :style="{ color: SENSOR_TYPES[s.tipo]?.color }">
           <template v-if="lastValue(s)">
             {{ lastValue(s) }}<small>{{ s.unidad }}</small>
           </template>
@@ -135,33 +138,47 @@ onMounted(load)
 }
 .sensor-card header {
   display: flex;
-  justify-content: space-between;
   align-items: flex-start;
-  gap: 8px;
+  gap: 14px;
+}
+.icon-box {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}
+.meta {
+  min-width: 0;
+}
+.label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-soft);
 }
 .sensor-card h3 {
-  margin: 0 0 2px;
+  margin: 2px 0;
 }
 .orchard-link {
   font-size: 0.8rem;
   text-decoration: none;
   color: var(--color-accent-green);
 }
-.tipo {
-  font-size: 0.78rem;
-  color: var(--color-text-soft);
-  white-space: nowrap;
-}
 .value {
-  font-size: 2rem;
-  font-weight: 700;
-  color: var(--color-text);
-  margin: 10px 0 12px;
+  font-size: 2.1rem;
+  font-weight: 800;
+  margin: 12px 0;
 }
 .value small {
   font-size: 1rem;
   color: var(--color-text-soft);
   margin-left: 4px;
+  font-weight: 600;
 }
 .sim {
   margin-top: 12px;
