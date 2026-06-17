@@ -124,7 +124,7 @@ onMounted(load)
 .back {
   display: inline-block;
   margin-bottom: 12px;
-  color: #4a90d9;
+  color: #0284c7;
   text-decoration: none;
   font-size: 0.9rem;
 }
@@ -162,7 +162,7 @@ textarea {
 button[type='submit'] {
   margin-top: 18px;
   padding: 12px;
-  background: #4a90d9;
+  background: #0284c7;
   color: white;
   border: none;
   border-radius: 8px;

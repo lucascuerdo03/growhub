@@ -89,7 +89,7 @@ h1 {
   height: 96px;
   border-radius: 50%;
   overflow: hidden;
-  background: #4a90d9;
+  background: #0284c7;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -137,7 +137,7 @@ input:disabled {
 button {
   margin-top: 18px;
   padding: 11px;
-  background: #4a90d9;
+  background: #0284c7;
   color: white;
   border: none;
   border-radius: 8px;

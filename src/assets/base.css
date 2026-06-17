@@ -5,30 +5,37 @@
 ----------------------------------------------------------------- */
 :root {
   /* Paleta */
-  --color-primary: #4a90d9;
-  --color-primary-dark: #3b7bc4;
-  --color-primary-soft: #eef4fb;
-  --color-primary-border: #cfe0f2;
+  --color-primary: #0284c7;
+  --color-primary-dark: #0369a1;
+  --color-primary-soft: #e0f2fe;
+  --color-primary-border: #bae6fd;
 
-  --color-bg: #f5f7fa;
+  --color-bg: #f8fafc;
   --color-surface: #ffffff;
-  --color-sidebar: #2f3e46;
+  --color-navbar: #ffffff;
 
-  --color-text: #1f2937;
-  --color-text-soft: #6b7280;
+  --color-text: #1e293b;
+  --color-text-soft: #64748b;
   --color-border: #e2e8f0;
-  --color-input-border: #d1d5db;
+  --color-border-soft: #f1f5f9;
+  --color-input-border: #cbd5e1;
 
-  --color-success: #16a34a;
-  --color-danger: #dc2626;
-  --color-accent-green: #2e7d4f;
+  --color-success: #10b981;
+  --color-danger: #ef4444;
+  --color-accent-green: #166534;
 
-  /* Formas */
+  /* Acentos de sensores (igual que la referencia) */
+  --accent-temp: #ef4444;
+  --accent-water: #3b82f6;
+  --accent-sun: #f59e0b;
+
+  /* Formas y sombras (tomadas de la referencia) */
   --radius-sm: 8px;
-  --radius-md: 10px;
-  --radius-lg: 12px;
-  --shadow-card: 0 2px 10px rgba(0, 0, 0, 0.06);
-  --shadow-elevated: 0 4px 20px rgba(0, 0, 0, 0.08);
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --shadow-card: 0 4px 6px -1px #0000000d, 0 2px 4px -2px #0000000d;
+  --shadow-elevated: 0 10px 15px -3px #0000000d, 0 4px 6px -4px #0000000d;
+  --shadow-hover: 0 20px 25px -5px #0000001a, 0 8px 10px -6px #0000001a;
 }
 
 * {

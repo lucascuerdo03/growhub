@@ -168,7 +168,7 @@ onMounted(load)
   width: 100%;
   padding: 9px;
   background: var(--color-primary-soft);
-  color: #2f6fb0;
+  color: #0369a1;
   border: 1px solid var(--color-primary-border);
   border-radius: var(--radius-sm);
   font-weight: 600;

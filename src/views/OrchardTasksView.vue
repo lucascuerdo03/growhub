@@ -156,7 +156,7 @@ onMounted(load)
 .back {
   display: inline-block;
   margin-bottom: 12px;
-  color: #4a90d9;
+  color: #0284c7;
   text-decoration: none;
   font-size: 0.9rem;
 }
@@ -196,7 +196,7 @@ h1 {
 .task-form button {
   align-self: flex-start;
   padding: 10px 20px;
-  background: #4a90d9;
+  background: #0284c7;
   color: white;
   border: none;
   border-radius: 8px;
@@ -258,7 +258,7 @@ h1 {
 }
 .tag.water {
   background: #e7f1fb;
-  color: #2f6fb0;
+  color: #0369a1;
 }
 .del {
   background: transparent;

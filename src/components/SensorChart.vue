@@ -31,7 +31,7 @@ const props = defineProps({
   // [{ valor, createdAt }] en orden cronológico ascendente
   lecturas: { type: Array, default: () => [] },
   label: { type: String, default: 'Valor' },
-  color: { type: String, default: '#4a90d9' },
+  color: { type: String, default: '#0284c7' },
 })
 
 const canvas = ref(null)

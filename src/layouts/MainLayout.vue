@@ -1,36 +1,31 @@
 <template>
-  <div class="layout">
-    <button class="menu-toggle" @click="open = !open" aria-label="Menú">☰</button>
+  <div class="app">
+    <header class="navbar">
+      <div class="nav-content">
+        <router-link to="/dashboard" class="brand">GrowHub 🌱</router-link>
 
-    <aside class="sidebar" :class="{ open }">
-      <div class="brand">GrowHub 🌱</div>
+        <nav class="nav-links" :class="{ open }" @click="open = false">
+          <router-link to="/dashboard"><span class="ic">🌱</span> Mis Huertos</router-link>
+          <router-link to="/tasks"><span class="ic">✅</span> Tareas</router-link>
+          <router-link to="/sensors"><span class="ic">📡</span> Sensores</router-link>
+          <router-link to="/settings"><span class="ic">⚙️</span> Ajustes</router-link>
+        </nav>
 
-      <nav @click="open = false">
-        <router-link to="/dashboard"><span class="ic">🌱</span> Mis Huertos</router-link>
-        <router-link to="/tasks"><span class="ic">✅</span> Tareas</router-link>
-        <router-link to="/sensors"><span class="ic">📡</span> Sensores</router-link>
-        <router-link to="/settings"><span class="ic">⚙️</span> Ajustes</router-link>
-      </nav>
-
-      <div class="sidebar-foot">
-        <router-link to="/profile" class="user-chip" @click="open = false">
-          <span class="avatar">
+        <div class="nav-right">
+          <router-link to="/profile" class="nav-avatar" title="Mi perfil">
             <img v-if="user?.photoURL" :src="user.photoURL" alt="" />
             <span v-else>{{ initial }}</span>
-          </span>
-          <span class="user-meta">
-            <span class="user-name">{{ user?.displayName || 'Usuario' }}</span>
-            <span class="user-email">{{ user?.email }}</span>
-          </span>
-        </router-link>
-        <button class="logout" @click="logout">Cerrar sesión</button>
+          </router-link>
+          <button class="logout" @click="logout" title="Cerrar sesión">Salir</button>
+          <button class="burger" @click="open = !open" aria-label="Menú">☰</button>
+        </div>
       </div>
-    </aside>
-
-    <div v-if="open" class="overlay" @click="open = false"></div>
+    </header>
 
     <main class="content">
-      <router-view />
+      <div class="container">
+        <router-view />
+      </div>
     </main>
   </div>
 </template>
@@ -56,171 +51,138 @@ async function logout() {
 </script>
 
 <style scoped>
-.layout {
-  display: flex;
+.app {
   min-height: 100vh;
 }
-.sidebar {
-  width: 240px;
-  background: var(--color-sidebar);
-  color: #e2e8f0;
-  padding: 22px 16px;
-  display: flex;
-  flex-direction: column;
+.navbar {
+  background: var(--color-navbar);
+  box-shadow: var(--shadow-card);
+  border-bottom: 1px solid var(--color-border-soft);
+  padding: 0.85rem 1.5rem;
   position: sticky;
   top: 0;
-  height: 100vh;
+  z-index: 100;
+}
+.nav-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 .brand {
-  font-size: 1.3rem;
+  font-size: 1.25rem;
   font-weight: 700;
-  color: #fff;
-  padding: 0 8px 22px;
+  color: var(--color-text);
+  text-decoration: none;
+  white-space: nowrap;
 }
-nav {
+.nav-links {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 4px;
   flex: 1;
+  margin-left: 12px;
 }
-nav a {
+.nav-links a {
   display: flex;
   align-items: center;
-  gap: 12px;
-  color: #cbd5e1;
-  padding: 11px 12px;
+  gap: 7px;
+  color: var(--color-text-soft);
+  padding: 8px 14px;
   border-radius: var(--radius-sm);
   text-decoration: none;
-  font-weight: 500;
-  font-size: 0.95rem;
+  font-weight: 600;
+  font-size: 0.92rem;
   transition: background 0.15s, color 0.15s;
 }
-nav a .ic {
-  font-size: 1.05rem;
+.nav-links a:hover {
+  color: var(--color-text);
+  background: var(--color-border-soft);
 }
-nav a:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.07);
+.nav-links a.router-link-active {
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
 }
-nav a.router-link-active {
-  color: #fff;
-  background: var(--color-primary);
-}
-.sidebar-foot {
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-  padding-top: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.user-chip {
+.nav-right {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px;
-  border-radius: var(--radius-sm);
-  text-decoration: none;
 }
-.user-chip:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-.user-chip .avatar {
-  width: 36px;
-  height: 36px;
+.nav-avatar {
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   background: var(--color-primary);
-  color: white;
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
   overflow: hidden;
+  text-decoration: none;
   flex-shrink: 0;
 }
-.user-chip .avatar img {
+.nav-avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
-.user-meta {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.user-name {
-  color: #e2e8f0;
-  font-size: 0.85rem;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.user-email {
-  font-size: 0.72rem;
-  color: #94a3b8;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .logout {
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  color: #e2e8f0;
-  padding: 9px;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-soft);
+  padding: 8px 14px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 0.85rem;
-  font-weight: 500;
+  font-weight: 600;
 }
 .logout:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--color-border-soft);
+  color: var(--color-text);
+}
+.burger {
+  display: none;
+  background: transparent;
+  border: none;
+  font-size: 1.4rem;
+  cursor: pointer;
+  color: var(--color-text);
 }
 .content {
-  flex: 1;
-  padding: 32px 36px;
+  padding: 32px 24px 48px;
+}
+.container {
   max-width: 1200px;
-}
-.menu-toggle {
-  display: none;
-  position: fixed;
-  top: 14px;
-  left: 14px;
-  z-index: 30;
-  width: 42px;
-  height: 42px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: var(--color-sidebar);
-  color: white;
-  font-size: 1.2rem;
-  cursor: pointer;
-}
-.overlay {
-  display: none;
+  margin: 0 auto;
 }
 
 @media (max-width: 760px) {
-  .menu-toggle {
+  .burger {
     display: block;
   }
-  .sidebar {
-    position: fixed;
-    z-index: 40;
-    left: -260px;
-    transition: left 0.25s ease;
-  }
-  .sidebar.open {
+  .nav-links {
+    position: absolute;
+    top: 100%;
     left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border-soft);
+    padding: 10px 14px;
+    margin: 0;
+    box-shadow: var(--shadow-elevated);
+    display: none;
   }
-  .overlay {
-    display: block;
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.4);
-    z-index: 35;
+  .nav-links.open {
+    display: flex;
   }
   .content {
-    padding: 70px 18px 24px;
+    padding: 22px 16px 40px;
   }
 }
 </style>

@@ -150,7 +150,7 @@ onMounted(load)
 .back {
   display: inline-block;
   margin-bottom: 12px;
-  color: #4a90d9;
+  color: #0284c7;
   text-decoration: none;
   font-size: 0.9rem;
 }
@@ -175,7 +175,7 @@ h1 {
 }
 .add-bar button {
   padding: 10px 20px;
-  background: #4a90d9;
+  background: #0284c7;
   color: white;
   border: none;
   border-radius: 8px;
@@ -224,9 +224,9 @@ h1 {
   margin-top: 12px;
   width: 100%;
   padding: 9px;
-  background: #eef4fb;
-  color: #2f6fb0;
-  border: 1px solid #cfe0f2;
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
   border-radius: 8px;
   font-weight: 600;
   cursor: pointer;

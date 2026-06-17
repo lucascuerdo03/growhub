@@ -234,7 +234,7 @@ onMounted(load)
 }
 .tag.water {
   background: var(--color-primary-soft);
-  color: #2f6fb0;
+  color: #0369a1;
 }
 .del {
   background: transparent;

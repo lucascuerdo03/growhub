@@ -167,7 +167,7 @@ onMounted(load)
 }
 .btn-soft {
   background: var(--color-primary-soft);
-  color: #2f6fb0;
+  color: #0369a1;
   border: 1px solid var(--color-primary-border);
   padding: 8px 14px;
   border-radius: var(--radius-sm);
@@ -177,7 +177,7 @@ onMounted(load)
   cursor: pointer;
 }
 .btn-soft:hover {
-  background: #e0ecf8;
+  background: #bae6fd;
 }
 .btn-danger {
   background: #fdf2f2;

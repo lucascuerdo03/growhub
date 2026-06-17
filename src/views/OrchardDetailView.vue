@@ -125,7 +125,7 @@ onMounted(load)
 .back {
   display: inline-block;
   margin-bottom: 12px;
-  color: #4a90d9;
+  color: #0284c7;
   text-decoration: none;
   font-size: 0.9rem;
 }
@@ -146,9 +146,9 @@ onMounted(load)
   flex-wrap: wrap;
 }
 .ghost-btn {
-  background: #eef4fb;
-  color: #2f6fb0;
-  border: 1px solid #cfe0f2;
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
   padding: 9px 16px;
   border-radius: 8px;
   font-weight: 600;
@@ -156,7 +156,7 @@ onMounted(load)
   font-size: 0.9rem;
 }
 .ghost-btn:hover {
-  background: #e0ecf8;
+  background: #bae6fd;
 }
 .orchard-desc {
   color: #6b7280;
@@ -184,7 +184,7 @@ onMounted(load)
 }
 .add-bar button {
   padding: 10px 20px;
-  background: #4a90d9;
+  background: #0284c7;
   color: white;
   border: none;
   border-radius: 8px;
