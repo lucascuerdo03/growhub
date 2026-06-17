@@ -1,0 +1,91 @@
+/* Estilos compartidos por las pantallas de autenticación */
+.auth-container {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #f4f6f8;
+  padding: 20px;
+}
+.auth-card {
+  background: white;
+  padding: 40px;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 380px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  text-align: center;
+}
+.auth-card h1 {
+  margin: 0 0 6px;
+}
+.auth-card .subtitle {
+  color: #6b7280;
+  margin: 0 0 24px;
+}
+.auth-card form {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+.auth-card label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #374151;
+  margin: 12px 0 4px;
+}
+.auth-card input {
+  padding: 11px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.95rem;
+}
+.auth-card input:focus {
+  outline: none;
+  border-color: #4a90d9;
+}
+.auth-card .error {
+  color: #dc2626;
+  font-size: 0.85rem;
+  margin: 8px 0 0;
+}
+.auth-card .success {
+  color: #16a34a;
+  font-size: 0.85rem;
+  margin: 8px 0 0;
+}
+.auth-card button {
+  margin-top: 16px;
+  padding: 12px;
+  background-color: #4a90d9;
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+.auth-card button:hover:not(:disabled) {
+  background-color: #3b7bc4;
+}
+.auth-card button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.auth-card .foot {
+  margin-top: 20px;
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+.auth-card .foot a,
+.auth-card .link-right {
+  color: #4a90d9;
+  font-weight: 600;
+  text-decoration: none;
+}
+.auth-card .link-right {
+  align-self: flex-end;
+  font-size: 0.85rem;
+  font-weight: 400;
+  margin: 10px 0;
+}

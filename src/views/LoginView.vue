@@ -1,90 +1,62 @@
 <template>
-  <div class="login-container">
-
-    <div class="login-card">
-
+  <div class="auth-container">
+    <div class="auth-card">
       <h1>GrowHub 🌱</h1>
-      <p>Gestión inteligente de huertos</p>
+      <p class="subtitle">Inicia sesión para continuar</p>
 
-      <input v-model="email" placeholder="Email">
+      <form @submit.prevent="login">
+        <label>Email</label>
+        <input v-model="email" type="email" placeholder="tu@email.com" autocomplete="email" />
 
-      <input
-        v-model="password"
-        type="password"
-        placeholder="Contraseña"
-      >
+        <label>Contraseña</label>
+        <input
+          v-model="password"
+          type="password"
+          placeholder="••••••••"
+          autocomplete="current-password"
+        />
 
-      <button @click="login">
-        Iniciar sesión
-      </button>
+        <router-link to="/forgot-password" class="link-right">
+          ¿Olvidaste tu contraseña?
+        </router-link>
 
+        <p v-if="error" class="error">{{ error }}</p>
+
+        <button type="submit" :disabled="loading">
+          {{ loading ? 'Entrando…' : 'Entrar' }}
+        </button>
+      </form>
+
+      <p class="foot">
+        ¿No tienes cuenta?
+        <router-link to="/register">Regístrate</router-link>
+      </p>
     </div>
-
   </div>
 </template>
 
-<script>
-export default {
-  data() {
-    return {
-      email: '',
-      password: ''
-    }
-  },
-  methods: {
-    login() {
-      this.$router.push('/dashboard')
-    }
+<script setup>
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { loginUser, authErrorMessage } from '../services/authService'
+import '../assets/auth.css'
+
+const router = useRouter()
+const email = ref('')
+const password = ref('')
+const error = ref('')
+const loading = ref(false)
+
+async function login() {
+  error.value = ''
+  loading.value = true
+  try {
+    await loginUser(email.value, password.value)
+    router.push('/dashboard')
+  } catch (e) {
+    error.value = authErrorMessage(e.code)
+  } finally {
+    loading.value = false
   }
 }
 </script>
-
-<style>
-
-.login-container {
-  height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background-color: #f4f6f8;
-}
-
-.login-card {
-  background: white;
-  padding: 40px;
-  border-radius: 10px;
-  width: 350px;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-  text-align: center;
-}
-
-.login-card h1 {
-  margin-bottom: 10px;
-}
-
-.login-card p {
-  color: gray;
-  margin-bottom: 20px;
-}
-
-.login-card input {
-  width: 100%;
-  padding: 10px;
-  margin: 8px 0;
-}
-
-.login-card button {
-  width: 100%;
-  padding: 10px;
-  margin-top: 10px;
-  background-color: #4CAF50;
-  border: none;
-  color: white;
-  cursor: pointer;
-}
-
-.login-card button:hover {
-  background-color: #45a049;
-}
-
-</style>

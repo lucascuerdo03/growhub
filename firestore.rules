@@ -1,0 +1,41 @@
+rules_version = '2';
+
+// Reglas básicas para el MVP de GrowHub.
+// Cada usuario solo puede ver y gestionar sus propios huertos (y sus cultivos).
+// Pégalas en: Firebase Console > Firestore Database > Reglas.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /orchards/{orchardId} {
+      // Solo el dueño puede leer/escribir su huerto.
+      allow read, delete, update: if request.auth != null
+        && resource.data.ownerId == request.auth.uid;
+      // Al crear, el ownerId debe ser el propio usuario.
+      allow create: if request.auth != null
+        && request.resource.data.ownerId == request.auth.uid;
+
+      // Subcolecciones del huerto (cultivos, sensores y sus lecturas):
+      // heredan el control del huerto padre.
+      function esDueno() {
+        return request.auth != null
+          && get(/databases/$(database)/documents/orchards/$(orchardId)).data.ownerId == request.auth.uid;
+      }
+
+      match /crops/{cropId} {
+        allow read, write: if esDueno();
+      }
+
+      match /sensors/{sensorId} {
+        allow read, write: if esDueno();
+
+        match /readings/{readingId} {
+          allow read, write: if esDueno();
+        }
+      }
+
+      match /tasks/{taskId} {
+        allow read, write: if esDueno();
+      }
+    }
+  }
+}
