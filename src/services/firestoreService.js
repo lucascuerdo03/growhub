@@ -154,6 +154,30 @@ export const updateTarea = (orchardId, taskId, data) =>
 export const deleteTarea = (orchardId, taskId) =>
   deleteDoc(doc(db, 'orchards', orchardId, 'tasks', taskId))
 
+/* ------------------------- Cuaderno de Campo ----------------------- */
+// Publicaciones del huerto (muro social): orchards/{id}/posts
+
+export const getPosts = async (orchardId) => {
+  const q = query(
+    collection(db, 'orchards', orchardId, 'posts'),
+    orderBy('createdAt', 'desc'),
+  )
+  const snap = await getDocs(q)
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+}
+
+export const createPost = (orchardId, { texto, autorId, autorNombre, autorFoto = '' }) =>
+  addDoc(collection(db, 'orchards', orchardId, 'posts'), {
+    texto,
+    autorId,
+    autorNombre,
+    autorFoto,
+    createdAt: serverTimestamp(),
+  })
+
+export const deletePost = (orchardId, postId) =>
+  deleteDoc(doc(db, 'orchards', orchardId, 'posts', postId))
+
 /* ----------------------- Agregados globales ------------------------ */
 // Datos de TODOS los huertos del usuario, para las secciones globales
 // (Tareas / Sensores) accesibles sin entrar en un huerto concreto.

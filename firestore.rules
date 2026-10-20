@@ -36,6 +36,10 @@ service cloud.firestore {
       match /tasks/{taskId} {
         allow read, write: if esDueno();
       }
+
+      match /posts/{postId} {
+        allow read, write: if esDueno();
+      }
     }
   }
 }
