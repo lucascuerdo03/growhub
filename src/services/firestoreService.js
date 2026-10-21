@@ -27,12 +27,16 @@ export const getHuertos = async (uid) => {
     .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
 }
 
-export const createHuerto = async (uid, { nombre, descripcion = '', lat = null, lng = null }) => {
+export const createHuerto = async (
+  uid,
+  { nombre, descripcion = '', lat = null, lng = null, imagen = '' },
+) => {
   const ref = await addDoc(collection(db, 'orchards'), {
     nombre,
     descripcion,
     lat,
     lng,
+    imagen,
     ownerId: uid,
     createdAt: serverTimestamp(),
   })
@@ -62,14 +66,29 @@ export const getCultivos = async (orchardId) => {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
 }
 
-export const createCultivo = async (orchardId, { nombre, especie = '' }) => {
+export const createCultivo = async (orchardId, data) => {
   const ref = await addDoc(collection(db, 'orchards', orchardId, 'crops'), {
-    nombre,
-    especie,
+    nombre: data.nombre,
+    especie: data.especie || '',
+    foto: data.foto || '',
+    familia: data.familia || '',
+    epocaSiembra: data.epocaSiembra || '',
+    riego: data.riego || '',
+    tempIdeal: data.tempIdeal || '',
+    plagas: data.plagas || '',
+    tiempoCosecha: data.tiempoCosecha || '',
     createdAt: serverTimestamp(),
   })
   return ref.id
 }
+
+export const getCultivo = async (orchardId, cropId) => {
+  const snap = await getDoc(doc(db, 'orchards', orchardId, 'crops', cropId))
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null
+}
+
+export const updateCultivo = (orchardId, cropId, data) =>
+  updateDoc(doc(db, 'orchards', orchardId, 'crops', cropId), data)
 
 export const deleteCultivo = (orchardId, cropId) =>
   deleteDoc(doc(db, 'orchards', orchardId, 'crops', cropId))
@@ -209,4 +228,32 @@ export const getAllSensores = async (uid) => {
     }),
   )
   return listas.flat()
+}
+
+// Resumen para el dashboard: huertos enriquecidos con sus contadores
+// (cultivos, tareas pendientes, sensores) y los totales globales.
+export const getResumen = async (uid) => {
+  const huertos = await getHuertos(uid)
+  const detalles = await Promise.all(
+    huertos.map(async (h) => {
+      const [crops, tasks, sensors] = await Promise.all([
+        getCultivos(h.id),
+        getTareas(h.id),
+        getSensores(h.id),
+      ])
+      return {
+        ...h,
+        nCultivos: crops.length,
+        nTareasPend: tasks.filter((t) => !t.completada).length,
+        nSensores: sensors.length,
+      }
+    }),
+  )
+  const totals = {
+    huertos: detalles.length,
+    cultivos: detalles.reduce((a, h) => a + h.nCultivos, 0),
+    tareasPend: detalles.reduce((a, h) => a + h.nTareasPend, 0),
+    sensores: detalles.reduce((a, h) => a + h.nSensores, 0),
+  }
+  return { huertos: detalles, totals }
 }

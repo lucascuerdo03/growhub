@@ -8,6 +8,7 @@
           <router-link to="/dashboard"><span class="ic">🌱</span> Mis Huertos</router-link>
           <router-link to="/tasks"><span class="ic">✅</span> Tareas</router-link>
           <router-link to="/sensors"><span class="ic">📡</span> Sensores</router-link>
+          <router-link to="/biblioteca"><span class="ic">📚</span> Biblioteca</router-link>
           <router-link to="/settings"><span class="ic">⚙️</span> Ajustes</router-link>
         </nav>
 

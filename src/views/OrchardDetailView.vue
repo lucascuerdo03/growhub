@@ -3,7 +3,7 @@
     <router-link to="/dashboard" class="back">← Mis Huertos</router-link>
 
     <!-- Banner hero -->
-    <section class="hero">
+    <section class="hero" :style="heroStyle">
       <div class="hero-overlay">
         <h1>{{ huerto?.nombre || 'Huerto' }}</h1>
         <p v-if="huerto?.descripcion" class="hero-loc">📍 {{ huerto.descripcion }}</p>
@@ -27,6 +27,7 @@
         <form class="inline-add" @submit.prevent="addCrop">
           <input v-model="cropNombre" placeholder="Nuevo cultivo" />
           <input v-model="cropEspecie" placeholder="Especie (opcional)" />
+          <input v-model="cropFoto" placeholder="Foto URL (opcional)" />
           <button type="submit" :disabled="!cropNombre.trim()">+</button>
         </form>
 
@@ -35,10 +36,20 @@
         </p>
 
         <div v-for="c in cultivosFiltrados" :key="c.id" class="crop-card">
-          <div class="crop-thumb">🌿</div>
+          <div
+            class="crop-thumb"
+            :class="{ photo: c.foto }"
+            :style="c.foto ? { backgroundImage: `url(${c.foto})` } : null"
+          >
+            <span v-if="!c.foto">🌿</span>
+          </div>
           <div class="crop-info">
             <strong>{{ c.nombre }}</strong>
             <span v-if="c.especie" class="pill type">{{ c.especie }}</span>
+            <div v-if="c.epocaSiembra || c.riego" class="crop-meta">
+              <span v-if="c.epocaSiembra">📅 {{ c.epocaSiembra }}</span>
+              <span v-if="c.riego">💧 {{ c.riego }}</span>
+            </div>
           </div>
           <button class="del" title="Eliminar" @click="removeCrop(c.id)">✕</button>
         </div>
@@ -153,6 +164,7 @@ const error = ref('')
 const search = ref('')
 const cropNombre = ref('')
 const cropEspecie = ref('')
+const cropFoto = ref('')
 const taskTitulo = ref('')
 const taskFrec = ref('Cada 2-3 días')
 const showDone = ref(false)
@@ -161,6 +173,9 @@ const publicando = ref(false)
 
 const inicial = computed(() =>
   (user.value?.displayName || user.value?.email || '?').charAt(0).toUpperCase(),
+)
+const heroStyle = computed(() =>
+  huerto.value?.imagen ? { backgroundImage: `url(${huerto.value.imagen})` } : {},
 )
 const cultivosFiltrados = computed(() => {
   const q = search.value.trim().toLowerCase()
@@ -188,19 +203,27 @@ function autorInfo() {
 async function load() {
   loading.value = true
   error.value = ''
-  try {
-    ;[huerto.value, cultivos.value, tareas.value, posts.value] = await Promise.all([
-      getHuerto(orchardId),
-      getCultivos(orchardId),
-      getTareas(orchardId),
-      getPosts(orchardId),
-    ])
-  } catch (e) {
+  // Cada sección se carga de forma independiente: si una falla (p. ej. las
+  // publicaciones por permisos), el resto del huerto se sigue viendo.
+  const [hRes, cRes, tRes, pRes] = await Promise.allSettled([
+    getHuerto(orchardId),
+    getCultivos(orchardId),
+    getTareas(orchardId),
+    getPosts(orchardId),
+  ])
+  if (hRes.status === 'fulfilled') huerto.value = hRes.value
+  if (cRes.status === 'fulfilled') cultivos.value = cRes.value
+  if (tRes.status === 'fulfilled') tareas.value = tRes.value
+  if (pRes.status === 'fulfilled') posts.value = pRes.value
+
+  // Solo es un error real si no se pudo cargar el huerto en sí.
+  if (hRes.status === 'rejected') {
     error.value = 'No se pudo cargar el huerto.'
-    console.error(e)
-  } finally {
-    loading.value = false
+    console.error(hRes.reason)
+  } else if (pRes.status === 'rejected') {
+    console.warn('Cuaderno de campo no disponible (revisa las reglas de posts):', pRes.reason)
   }
+  loading.value = false
 }
 
 async function addCrop() {
@@ -209,9 +232,11 @@ async function addCrop() {
     await createCultivo(orchardId, {
       nombre: cropNombre.value.trim(),
       especie: cropEspecie.value.trim(),
+      foto: cropFoto.value.trim(),
     })
     cropNombre.value = ''
     cropEspecie.value = ''
+    cropFoto.value = ''
     cultivos.value = await getCultivos(orchardId)
   } catch (e) {
     error.value = 'No se pudo crear el cultivo.'
@@ -311,11 +336,15 @@ onMounted(load)
 .hero {
   border-radius: var(--radius-lg);
   background: linear-gradient(120deg, var(--color-primary), var(--color-secondary));
+  background-size: cover;
+  background-position: center;
   margin-bottom: 28px;
   overflow: hidden;
+  box-shadow: var(--shadow-card);
 }
 .hero-overlay {
-  padding: 38px 32px;
+  padding: 48px 32px 38px;
+  background: linear-gradient(0deg, rgba(15, 23, 42, 0.75), rgba(15, 23, 42, 0.25));
 }
 .hero h1 {
   margin: 0;
@@ -423,6 +452,18 @@ onMounted(load)
   justify-content: center;
   font-size: 1.3rem;
   flex-shrink: 0;
+}
+.crop-thumb.photo {
+  background-size: cover;
+  background-position: center;
+}
+.crop-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 4px;
+  font-size: 0.76rem;
+  color: var(--color-text-soft);
 }
 .crop-info {
   flex: 1;

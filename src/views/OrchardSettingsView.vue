@@ -13,6 +13,10 @@
         <label>Descripción</label>
         <textarea v-model="descripcion" rows="3" placeholder="Descripción"></textarea>
 
+        <label>Foto del huerto (URL)</label>
+        <input v-model="imagen" placeholder="https://…/foto.jpg" />
+        <div v-if="imagen" class="preview" :style="{ backgroundImage: `url(${imagen})` }"></div>
+
         <label>Ubicación</label>
         <p class="hint">Haz clic en el mapa para marcar la ubicación exacta.</p>
         <LocationMap :lat="lat" :lng="lng" editable @update="onPick" />
@@ -55,6 +59,7 @@ const orchardId = route.params.id
 const huerto = ref(null)
 const nombre = ref('')
 const descripcion = ref('')
+const imagen = ref('')
 const lat = ref(null)
 const lng = ref(null)
 const loading = ref(true)
@@ -75,6 +80,7 @@ async function load() {
     if (huerto.value) {
       nombre.value = huerto.value.nombre || ''
       descripcion.value = huerto.value.descripcion || ''
+      imagen.value = huerto.value.imagen || ''
       lat.value = huerto.value.lat ?? null
       lng.value = huerto.value.lng ?? null
     }
@@ -94,6 +100,7 @@ async function save() {
     await updateHuerto(orchardId, {
       nombre: nombre.value.trim(),
       descripcion: descripcion.value.trim(),
+      imagen: imagen.value.trim(),
       lat: lat.value,
       lng: lng.value,
     })
@@ -158,6 +165,14 @@ textarea {
   font-size: 0.9rem;
   color: #374151;
   margin: 8px 0 0;
+}
+.preview {
+  height: 130px;
+  border-radius: var(--radius-sm);
+  background-size: cover;
+  background-position: center;
+  margin-top: 8px;
+  border: 1px solid var(--color-border);
 }
 button[type='submit'] {
   margin-top: 18px;
