@@ -5,6 +5,7 @@
     <!-- Banner hero -->
     <section class="hero" :style="heroStyle">
       <div class="hero-overlay">
+        <span v-if="huerto?.publico" class="hero-badge">🌍 PÚBLICO</span>
         <h1>{{ huerto?.nombre || 'Huerto' }}</h1>
         <p v-if="huerto?.descripcion" class="hero-loc">📍 {{ huerto.descripcion }}</p>
         <div class="hero-actions">
@@ -43,14 +44,15 @@
           >
             <span v-if="!c.foto">🌿</span>
           </div>
-          <div class="crop-info">
+          <router-link :to="`/orchard/${orchardId}/crop/${c.id}`" class="crop-info">
             <strong>{{ c.nombre }}</strong>
             <span v-if="c.especie" class="pill type">{{ c.especie }}</span>
             <div v-if="c.epocaSiembra || c.riego" class="crop-meta">
               <span v-if="c.epocaSiembra">📅 {{ c.epocaSiembra }}</span>
               <span v-if="c.riego">💧 {{ c.riego }}</span>
             </div>
-          </div>
+          </router-link>
+          <router-link :to="`/orchard/${orchardId}/crop/${c.id}`" class="chevron" title="Ver ficha">›</router-link>
           <button class="del" title="Eliminar" @click="removeCrop(c.id)">✕</button>
         </div>
       </section>
@@ -64,6 +66,10 @@
           <select v-model="taskFrec">
             <option v-for="f in FRECUENCIAS" :key="f" :value="f">{{ f }}</option>
           </select>
+          <select v-model="taskResp">
+            <option value="">Sin responsable</option>
+            <option v-for="m in miembros" :key="m" :value="m">{{ m }}</option>
+          </select>
           <button type="submit" :disabled="!taskTitulo.trim()">+</button>
         </form>
 
@@ -73,8 +79,9 @@
           <input type="checkbox" :checked="t.completada" @change="toggleTask(t)" />
           <div class="task-info">
             <strong>{{ t.titulo }}</strong>
-            <div v-if="t.frecuenciaRiego" class="tags">
-              <span class="pill water">💧 {{ t.frecuenciaRiego }}</span>
+            <div v-if="t.frecuenciaRiego || t.responsable" class="tags">
+              <span v-if="t.frecuenciaRiego" class="pill water">💧 {{ t.frecuenciaRiego }}</span>
+              <span v-if="t.responsable" class="pill resp">👤 {{ t.responsable }}</span>
             </div>
           </div>
           <button class="del" @click="removeTask(t)">✕</button>
@@ -101,6 +108,7 @@
         <span class="avatar">{{ inicial }}</span>
         <div class="composer-body">
           <textarea v-model="nuevoPost" rows="2" placeholder="¿Qué está pasando en el huerto?"></textarea>
+          <input v-model="postFoto" class="post-foto-input" placeholder="📷 Foto (URL, opcional)" />
           <div class="composer-foot">
             <button type="submit" class="publish" :disabled="publicando || !nuevoPost.trim()">
               ➤ Publicar
@@ -125,6 +133,7 @@
           <button v-if="p.autorId === user?.uid" class="del" @click="removePost(p)">✕</button>
         </header>
         <p class="post-text">{{ p.texto }}</p>
+        <img v-if="p.foto" :src="p.foto" alt="" class="post-img" />
       </article>
     </section>
   </div>
@@ -167,13 +176,23 @@ const cropEspecie = ref('')
 const cropFoto = ref('')
 const taskTitulo = ref('')
 const taskFrec = ref('Cada 2-3 días')
+const taskResp = ref('')
 const showDone = ref(false)
 const nuevoPost = ref('')
+const postFoto = ref('')
 const publicando = ref(false)
 
 const inicial = computed(() =>
   (user.value?.displayName || user.value?.email || '?').charAt(0).toUpperCase(),
 )
+// Miembros a los que asignar tareas: dueño (tú) + colaboradores.
+const miembros = computed(() => {
+  const lista = []
+  const yo = user.value?.displayName || user.value?.email
+  if (yo) lista.push(yo)
+  ;(huerto.value?.colaboradoresEmails || []).forEach((em) => lista.push(em))
+  return lista
+})
 const heroStyle = computed(() =>
   huerto.value?.imagen ? { backgroundImage: `url(${huerto.value.imagen})` } : {},
 )
@@ -258,8 +277,13 @@ async function removeCrop(id) {
 async function addTask() {
   if (!taskTitulo.value.trim()) return
   try {
-    await createTarea(orchardId, { titulo: taskTitulo.value.trim(), frecuenciaRiego: taskFrec.value })
+    await createTarea(orchardId, {
+      titulo: taskTitulo.value.trim(),
+      frecuenciaRiego: taskFrec.value,
+      responsable: taskResp.value,
+    })
     taskTitulo.value = ''
+    taskResp.value = ''
     tareas.value = await getTareas(orchardId)
   } catch (e) {
     error.value = 'No se pudo crear la tarea.'
@@ -300,8 +324,13 @@ async function publicar() {
   if (!nuevoPost.value.trim()) return
   publicando.value = true
   try {
-    await createPost(orchardId, { texto: nuevoPost.value.trim(), ...autorInfo() })
+    await createPost(orchardId, {
+      texto: nuevoPost.value.trim(),
+      foto: postFoto.value.trim(),
+      ...autorInfo(),
+    })
     nuevoPost.value = ''
+    postFoto.value = ''
     posts.value = await getPosts(orchardId)
   } catch (e) {
     error.value = 'No se pudo publicar.'
@@ -468,9 +497,20 @@ onMounted(load)
 .crop-info {
   flex: 1;
   min-width: 0;
+  text-decoration: none;
 }
 .crop-info strong {
   display: block;
+  color: var(--color-primary);
+}
+.chevron {
+  color: var(--color-text-soft);
+  font-size: 1.6rem;
+  text-decoration: none;
+  line-height: 1;
+  padding: 0 4px;
+}
+.chevron:hover {
   color: var(--color-primary);
 }
 .pill {
@@ -487,6 +527,38 @@ onMounted(load)
 .pill.water {
   background: var(--color-primary-soft);
   color: #0369a1;
+}
+.pill.resp {
+  background: #dcfce7;
+  color: #166534;
+}
+.hero-badge {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--color-primary-dark);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 4px 11px;
+  border-radius: 999px;
+  margin-bottom: 10px;
+}
+.post-foto-input {
+  width: 100%;
+  border: none;
+  border-top: 1px solid var(--color-border-soft);
+  padding: 8px 0 0;
+  margin-top: 6px;
+  font-size: 0.88rem;
+}
+.post-foto-input:focus {
+  outline: none;
+}
+.post-img {
+  width: 100%;
+  max-height: 340px;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  margin-top: 10px;
 }
 .group-label {
   font-size: 0.75rem;

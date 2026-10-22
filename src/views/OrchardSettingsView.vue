@@ -24,6 +24,11 @@
           📍 {{ lat.toFixed(5) }}, {{ lng.toFixed(5) }}
         </p>
 
+        <label class="check">
+          <input type="checkbox" v-model="publico" />
+          <span>Huerto público (visible en la Comunidad)</span>
+        </label>
+
         <p v-if="error" class="error">{{ error }}</p>
         <p v-if="saved" class="success">Cambios guardados.</p>
 
@@ -31,6 +36,24 @@
           {{ saving ? 'Guardando…' : 'Guardar cambios' }}
         </button>
       </form>
+
+      <!-- Equipo -->
+      <section class="team">
+        <h3>👥 Equipo del huerto</h3>
+        <p class="hint">Añade colaboradores por email. Podrán ver y editar este huerto.</p>
+        <form class="team-add" @submit.prevent="addEmail">
+          <input v-model="nuevoEmail" type="email" placeholder="colaborador@email.com" />
+          <button type="submit" :disabled="!nuevoEmail.trim()">Añadir</button>
+        </form>
+        <p v-if="teamMsg" class="hint">{{ teamMsg }}</p>
+        <ul v-if="colaboradores.length" class="team-list">
+          <li v-for="em in colaboradores" :key="em">
+            <span>👤 {{ em }}</span>
+            <button class="del-sm" @click="removeEmail(em)">Quitar</button>
+          </li>
+        </ul>
+        <p v-else class="muted small">Todavía no hay colaboradores.</p>
+      </section>
 
       <div class="danger">
         <h3>Zona peligrosa</h3>
@@ -50,6 +73,8 @@ import {
   getHuerto,
   updateHuerto,
   deleteHuerto,
+  addColaborador,
+  removeColaborador,
 } from '../services/firestoreService'
 
 const route = useRoute()
@@ -57,6 +82,10 @@ const router = useRouter()
 const orchardId = route.params.id
 
 const huerto = ref(null)
+const publico = ref(false)
+const colaboradores = ref([])
+const nuevoEmail = ref('')
+const teamMsg = ref('')
 const nombre = ref('')
 const descripcion = ref('')
 const imagen = ref('')
@@ -81,6 +110,8 @@ async function load() {
       nombre.value = huerto.value.nombre || ''
       descripcion.value = huerto.value.descripcion || ''
       imagen.value = huerto.value.imagen || ''
+      publico.value = huerto.value.publico || false
+      colaboradores.value = huerto.value.colaboradoresEmails || []
       lat.value = huerto.value.lat ?? null
       lng.value = huerto.value.lng ?? null
     }
@@ -101,6 +132,7 @@ async function save() {
       nombre: nombre.value.trim(),
       descripcion: descripcion.value.trim(),
       imagen: imagen.value.trim(),
+      publico: publico.value,
       lat: lat.value,
       lng: lng.value,
     })
@@ -110,6 +142,30 @@ async function save() {
     console.error(e)
   } finally {
     saving.value = false
+  }
+}
+
+async function addEmail() {
+  const em = nuevoEmail.value.trim().toLowerCase()
+  if (!em) return
+  teamMsg.value = ''
+  try {
+    await addColaborador(orchardId, em)
+    if (!colaboradores.value.includes(em)) colaboradores.value.push(em)
+    nuevoEmail.value = ''
+    teamMsg.value = `✓ ${em} añadido.`
+  } catch (e) {
+    teamMsg.value = 'No se pudo añadir el colaborador.'
+    console.error(e)
+  }
+}
+
+async function removeEmail(em) {
+  try {
+    await removeColaborador(orchardId, em)
+    colaboradores.value = colaboradores.value.filter((x) => x !== em)
+  } catch (e) {
+    console.error(e)
   }
 }
 
@@ -187,6 +243,77 @@ button[type='submit'] {
 button[type='submit']:disabled {
   opacity: 0.6;
   cursor: default;
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.check input {
+  width: 18px;
+  height: 18px;
+}
+.team {
+  margin-top: 32px;
+  padding: 22px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  max-width: 640px;
+}
+.team h3 {
+  margin: 0 0 6px;
+}
+.team-add {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+}
+.team-add input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-sm);
+}
+.team-add button {
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+  padding: 10px 18px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.team-add button:disabled {
+  opacity: 0.55;
+}
+.team-list {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0;
+}
+.team-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid var(--color-border-soft);
+}
+.del-sm {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-danger);
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.small {
+  font-size: 0.85rem;
 }
 .danger {
   margin-top: 36px;

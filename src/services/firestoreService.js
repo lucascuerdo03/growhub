@@ -11,25 +11,43 @@ import {
   orderBy,
   limit,
   serverTimestamp,
+  arrayUnion,
+  arrayRemove,
 } from 'firebase/firestore'
 import { db } from '../firebase'
 
 /* ----------------------------- Huertos ----------------------------- */
 
-// Lista los huertos que pertenecen al usuario dado.
-// Solo filtramos por ownerId y ordenamos en el cliente para no exigir
-// un índice compuesto de Firestore (where + orderBy).
-export const getHuertos = async (uid) => {
-  const q = query(collection(db, 'orchards'), where('ownerId', '==', uid))
-  const snap = await getDocs(q)
+const porFecha = (a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
+
+// Huertos del usuario: los que posee + aquellos en los que colabora (por email).
+export const getHuertos = async (uid, email = null) => {
+  const consultas = [getDocs(query(collection(db, 'orchards'), where('ownerId', '==', uid)))]
+  if (email) {
+    consultas.push(
+      getDocs(query(collection(db, 'orchards'), where('colaboradoresEmails', 'array-contains', email))),
+    )
+  }
+  const snaps = await Promise.all(consultas)
+  const mapa = new Map()
+  snaps.forEach((snap) =>
+    snap.docs.forEach((d) => mapa.set(d.id, { id: d.id, ...d.data(), esPropio: d.data().ownerId === uid })),
+  )
+  return [...mapa.values()].sort(porFecha)
+}
+
+// Huertos públicos de OTROS usuarios (para la pestaña Comunidad).
+export const getHuertosPublicos = async (uid) => {
+  const snap = await getDocs(query(collection(db, 'orchards'), where('publico', '==', true)))
   return snap.docs
     .map((d) => ({ id: d.id, ...d.data() }))
-    .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+    .filter((h) => h.ownerId !== uid)
+    .sort(porFecha)
 }
 
 export const createHuerto = async (
   uid,
-  { nombre, descripcion = '', lat = null, lng = null, imagen = '' },
+  { nombre, descripcion = '', lat = null, lng = null, imagen = '', publico = false, ownerNombre = '' },
 ) => {
   const ref = await addDoc(collection(db, 'orchards'), {
     nombre,
@@ -37,7 +55,10 @@ export const createHuerto = async (
     lat,
     lng,
     imagen,
+    publico,
+    colaboradoresEmails: [],
     ownerId: uid,
+    ownerNombre,
     createdAt: serverTimestamp(),
   })
   return ref.id
@@ -53,6 +74,17 @@ export const updateHuerto = (id, data) =>
   updateDoc(doc(db, 'orchards', id), data)
 
 export const deleteHuerto = (id) => deleteDoc(doc(db, 'orchards', id))
+
+// Equipo: colaboradores por email (en minúsculas).
+export const addColaborador = (id, email) =>
+  updateDoc(doc(db, 'orchards', id), {
+    colaboradoresEmails: arrayUnion(email.trim().toLowerCase()),
+  })
+
+export const removeColaborador = (id, email) =>
+  updateDoc(doc(db, 'orchards', id), {
+    colaboradoresEmails: arrayRemove(email),
+  })
 
 /* ----------------------------- Cultivos ---------------------------- */
 // Cada cultivo se guarda como subcolección del huerto: orchards/{id}/crops
@@ -70,7 +102,9 @@ export const createCultivo = async (orchardId, data) => {
   const ref = await addDoc(collection(db, 'orchards', orchardId, 'crops'), {
     nombre: data.nombre,
     especie: data.especie || '',
+    descripcion: data.descripcion || '',
     foto: data.foto || '',
+    fechaSiembra: data.fechaSiembra || '',
     familia: data.familia || '',
     epocaSiembra: data.epocaSiembra || '',
     riego: data.riego || '',
@@ -106,15 +140,19 @@ export const getSensores = async (orchardId) => {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
 }
 
-export const createSensor = async (orchardId, { nombre, tipo, unidad }) => {
+export const createSensor = async (orchardId, { nombre, tipo, unidad, cropId = null }) => {
   const ref = await addDoc(collection(db, 'orchards', orchardId, 'sensors'), {
     nombre,
     tipo,
     unidad,
+    cropId,
     createdAt: serverTimestamp(),
   })
   return ref.id
 }
+
+export const updateSensor = (orchardId, sensorId, data) =>
+  updateDoc(doc(db, 'orchards', orchardId, 'sensors', sensorId), data)
 
 export const deleteSensor = (orchardId, sensorId) =>
   deleteDoc(doc(db, 'orchards', orchardId, 'sensors', sensorId))
@@ -161,6 +199,7 @@ export const createTarea = async (orchardId, data) => {
     cropId: data.cropId || null,
     cropNombre: data.cropNombre || '',
     frecuenciaRiego: data.frecuenciaRiego || '',
+    responsable: data.responsable || '',
     completada: false,
     createdAt: serverTimestamp(),
   })
@@ -185,12 +224,13 @@ export const getPosts = async (orchardId) => {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
 }
 
-export const createPost = (orchardId, { texto, autorId, autorNombre, autorFoto = '' }) =>
+export const createPost = (orchardId, { texto, autorId, autorNombre, autorFoto = '', foto = '' }) =>
   addDoc(collection(db, 'orchards', orchardId, 'posts'), {
     texto,
     autorId,
     autorNombre,
     autorFoto,
+    foto,
     createdAt: serverTimestamp(),
   })
 
@@ -232,8 +272,8 @@ export const getAllSensores = async (uid) => {
 
 // Resumen para el dashboard: huertos enriquecidos con sus contadores
 // (cultivos, tareas pendientes, sensores) y los totales globales.
-export const getResumen = async (uid) => {
-  const huertos = await getHuertos(uid)
+export const getResumen = async (uid, email = null) => {
+  const huertos = await getHuertos(uid, email)
   const detalles = await Promise.all(
     huertos.map(async (h) => {
       const [crops, tasks, sensors] = await Promise.all([

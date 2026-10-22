@@ -42,46 +42,75 @@
 
       <p v-if="error" class="error">{{ error }}</p>
 
-      <h2 class="section-title">Tus Huertos</h2>
-
-      <!-- Onboarding (sin huertos) -->
-      <div v-if="!huertos.length" class="onboarding">
-        <div class="onboarding-art">🌱</div>
-        <h3>Crea tu primer huerto</h3>
-        <p>Empieza a gestionar tus cultivos, sensores y tareas. Es rápido y fácil.</p>
-        <button class="primary big" @click="openModal">＋ Registrar mi primer huerto</button>
+      <!-- Pestañas -->
+      <div class="tabs">
+        <button :class="{ active: tab === 'mis' }" @click="tab = 'mis'">Mis Huertos</button>
+        <button :class="{ active: tab === 'comunidad' }" @click="verComunidad">Comunidad</button>
       </div>
 
-      <!-- Tarjetas de huerto -->
-      <div v-else class="grid">
-        <div
-          v-for="h in huertos"
-          :key="h.id"
-          class="card"
-          :style="cardStyle(h)"
-        >
-          <div class="card-overlay">
-            <button class="del" title="Eliminar" @click.stop="remove(h.id)">✕</button>
-            <div class="card-top">
-              <h3>{{ h.nombre }}</h3>
-              <p class="loc">📍 {{ h.descripcion || 'Sin ubicación' }}</p>
-            </div>
-            <div class="card-bottom">
-              <div class="badges">
-                <span class="badge">🌿 {{ h.nCultivos }}</span>
-                <span class="badge">✅ {{ h.nTareasPend }}</span>
-                <span class="badge">📡 {{ h.nSensores }}</span>
+      <!-- MIS HUERTOS -->
+      <template v-if="tab === 'mis'">
+        <div v-if="!huertos.length" class="onboarding">
+          <div class="onboarding-art">🌱</div>
+          <h3>Crea tu primer huerto</h3>
+          <p>Empieza a gestionar tus cultivos, sensores y tareas. Es rápido y fácil.</p>
+          <button class="primary big" @click="openModal">＋ Registrar mi primer huerto</button>
+        </div>
+
+        <div v-else class="grid">
+          <div v-for="h in huertos" :key="h.id" class="card" :style="cardStyle(h)">
+            <div class="card-overlay">
+              <button v-if="h.esPropio" class="del" title="Eliminar" @click.stop="remove(h.id)">✕</button>
+              <div class="card-top">
+                <div class="card-tags">
+                  <span v-if="h.publico" class="tag pub">PÚBLICO</span>
+                  <span v-if="!h.esPropio" class="tag shared">COMPARTIDO</span>
+                </div>
+                <h3>{{ h.nombre }}</h3>
+                <p class="loc">📍 {{ h.descripcion || 'Sin ubicación' }}</p>
               </div>
-              <router-link :to="`/orchard/${h.id}`" class="explore-btn">Explorar →</router-link>
+              <div class="card-bottom">
+                <div class="badges">
+                  <span class="badge">🌿 {{ h.nCultivos }}</span>
+                  <span class="badge">✅ {{ h.nTareasPend }}</span>
+                  <span class="badge">📡 {{ h.nSensores }}</span>
+                </div>
+                <router-link :to="`/orchard/${h.id}`" class="explore-btn">Explorar →</router-link>
+              </div>
+            </div>
+          </div>
+
+          <button class="add-card" @click="openModal">
+            <span class="plus">＋</span>
+            <span>Registrar Nuevo Huerto</span>
+          </button>
+        </div>
+      </template>
+
+      <!-- COMUNIDAD -->
+      <template v-else>
+        <p v-if="loadingCom" class="muted center">Cargando comunidad…</p>
+        <div v-else-if="!comunidad.length" class="onboarding">
+          <div class="onboarding-art">🌍</div>
+          <h3>Aún no hay huertos públicos</h3>
+          <p>Cuando otros usuarios compartan sus huertos, aparecerán aquí.</p>
+        </div>
+        <div v-else class="grid">
+          <div v-for="h in comunidad" :key="h.id" class="card" :style="cardStyle(h)">
+            <div class="card-overlay">
+              <div class="card-top">
+                <span class="tag pub">PÚBLICO</span>
+                <h3>{{ h.nombre }}</h3>
+                <p class="loc">📍 {{ h.descripcion || 'Sin ubicación' }}</p>
+              </div>
+              <div class="card-bottom">
+                <span class="owner-chip">👤 {{ h.ownerNombre || 'Usuario' }}</span>
+                <router-link :to="`/orchard/${h.id}`" class="explore-btn">Ver →</router-link>
+              </div>
             </div>
           </div>
         </div>
-
-        <button class="add-card" @click="openModal">
-          <span class="plus">＋</span>
-          <span>Registrar Nuevo Huerto</span>
-        </button>
-      </div>
+      </template>
     </template>
 
     <!-- Modal nuevo huerto -->
@@ -102,6 +131,11 @@
         <LocationMap :lat="lat" :lng="lng" editable @update="onPick" />
         <p v-if="lat != null" class="coords">📍 {{ lat.toFixed(5) }}, {{ lng.toFixed(5) }}</p>
 
+        <label class="check">
+          <input type="checkbox" v-model="publico" />
+          <span>Huerto público (visible en la Comunidad)</span>
+        </label>
+
         <p v-if="modalError" class="error">{{ modalError }}</p>
       </form>
 
@@ -120,7 +154,12 @@ import { ref, computed, onMounted, defineAsyncComponent } from 'vue'
 import { useAuth } from '../composables/useAuth'
 import BaseModal from '../components/BaseModal.vue'
 const LocationMap = defineAsyncComponent(() => import('../components/LocationMap.vue'))
-import { getResumen, createHuerto, deleteHuerto } from '../services/firestoreService'
+import {
+  getResumen,
+  getHuertosPublicos,
+  createHuerto,
+  deleteHuerto,
+} from '../services/firestoreService'
 
 const { user } = useAuth()
 const huertos = ref([])
@@ -128,10 +167,16 @@ const totals = ref({ huertos: 0, cultivos: 0, tareasPend: 0, sensores: 0 })
 const loading = ref(true)
 const error = ref('')
 
+const tab = ref('mis')
+const comunidad = ref([])
+const loadingCom = ref(false)
+const comCargada = ref(false)
+
 const showModal = ref(false)
 const nombre = ref('')
 const descripcion = ref('')
 const imagen = ref('')
+const publico = ref(false)
 const lat = ref(null)
 const lng = ref(null)
 const saving = ref(false)
@@ -169,16 +214,31 @@ function closeModal() {
   nombre.value = ''
   descripcion.value = ''
   imagen.value = ''
+  publico.value = false
   lat.value = null
   lng.value = null
   modalError.value = ''
+}
+
+async function verComunidad() {
+  tab.value = 'comunidad'
+  if (comCargada.value) return
+  loadingCom.value = true
+  try {
+    comunidad.value = await getHuertosPublicos(user.value.uid)
+    comCargada.value = true
+  } catch (e) {
+    console.error(e)
+  } finally {
+    loadingCom.value = false
+  }
 }
 
 async function load() {
   loading.value = true
   error.value = ''
   try {
-    const r = await getResumen(user.value.uid)
+    const r = await getResumen(user.value.uid, user.value.email)
     huertos.value = r.huertos
     totals.value = r.totals
   } catch (e) {
@@ -198,6 +258,8 @@ async function add() {
       nombre: nombre.value.trim(),
       descripcion: descripcion.value.trim(),
       imagen: imagen.value.trim(),
+      publico: publico.value,
+      ownerNombre: user.value.displayName || user.value.email,
       lat: lat.value,
       lng: lng.value,
     })
@@ -326,6 +388,72 @@ onMounted(load)
 .section-title {
   margin: 0 0 18px;
   font-size: 1.3rem;
+}
+/* Pestañas */
+.tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 2px solid var(--color-border-soft);
+  margin-bottom: 22px;
+}
+.tabs button {
+  background: transparent;
+  border: none;
+  padding: 10px 16px;
+  font-size: 1.02rem;
+  font-weight: 600;
+  color: var(--color-text-soft);
+  cursor: pointer;
+  position: relative;
+  bottom: -2px;
+}
+.tabs button.active {
+  color: var(--color-primary);
+  border-bottom: 3px solid var(--color-primary);
+}
+.card-tags {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+.tag.pub {
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--color-primary-dark);
+}
+.tag.shared {
+  background: rgba(255, 255, 255, 0.85);
+  color: #7c3aed;
+}
+.owner-chip {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  align-self: flex-start;
+  backdrop-filter: blur(4px);
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.check input {
+  width: 18px;
+  height: 18px;
 }
 /* Grid huertos */
 .grid {

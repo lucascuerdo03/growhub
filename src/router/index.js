@@ -19,6 +19,7 @@ const OrchardSensorsView = () => import('../views/OrchardSensorsView.vue')
 const OrchardTasksView = () => import('../views/OrchardTasksView.vue')
 const GlobalTasksView = () => import('../views/GlobalTasksView.vue')
 const GlobalSensorsView = () => import('../views/GlobalSensorsView.vue')
+const CropDetailView = () => import('../views/CropDetailView.vue')
 
 const routes = [
   // Página pública de entrada (si hay sesión, el guard redirige al dashboard).
@@ -46,6 +47,7 @@ const routes = [
       { path: 'settings', component: SettingsView },
       { path: 'profile', component: ProfileView },
       { path: 'orchard/:id', component: OrchardDetailView },
+      { path: 'orchard/:id/crop/:cropId', component: CropDetailView },
       { path: 'orchard/:id/settings', component: OrchardSettingsView },
       { path: 'orchard/:id/sensors', component: OrchardSensorsView },
       { path: 'orchard/:id/tasks', component: OrchardTasksView },

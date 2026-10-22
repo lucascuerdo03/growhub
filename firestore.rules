@@ -1,44 +1,68 @@
 rules_version = '2';
 
-// Reglas básicas para el MVP de GrowHub.
-// Cada usuario solo puede ver y gestionar sus propios huertos (y sus cultivos).
+// Reglas de GrowHub.
+// - El dueño y los colaboradores (por email) pueden leer y editar un huerto.
+// - Cualquier usuario autenticado puede LEER un huerto marcado como público
+//   (y sus subcolecciones) para la sección Comunidad.
 // Pégalas en: Firebase Console > Firestore Database > Reglas.
 service cloud.firestore {
   match /databases/{database}/documents {
 
     match /orchards/{orchardId} {
-      // Solo el dueño puede leer/escribir su huerto.
-      allow read, delete, update: if request.auth != null
-        && resource.data.ownerId == request.auth.uid;
-      // Al crear, el ownerId debe ser el propio usuario.
+      function datos() { return resource.data; }
+      function esDueno() {
+        return request.auth != null && datos().ownerId == request.auth.uid;
+      }
+      function esColaborador() {
+        return request.auth != null
+          && request.auth.token.email in datos().get('colaboradoresEmails', []);
+      }
+      function esPublico() {
+        return datos().get('publico', false) == true;
+      }
+      function puedeGestionar() { return esDueno() || esColaborador(); }
+      function puedeVer() {
+        return request.auth != null && (puedeGestionar() || esPublico());
+      }
+
+      // Para las subcolecciones, consultamos el huerto padre.
+      function padre() {
+        return get(/databases/$(database)/documents/orchards/$(orchardId)).data;
+      }
+      function gestionaPadre() {
+        return request.auth != null
+          && (padre().ownerId == request.auth.uid
+              || request.auth.token.email in padre().get('colaboradoresEmails', []));
+      }
+      function vePadre() {
+        return request.auth != null
+          && (gestionaPadre() || padre().get('publico', false) == true);
+      }
+
+      allow read: if puedeVer();
       allow create: if request.auth != null
         && request.resource.data.ownerId == request.auth.uid;
-
-      // Subcolecciones del huerto (cultivos, sensores y sus lecturas):
-      // heredan el control del huerto padre.
-      function esDueno() {
-        return request.auth != null
-          && get(/databases/$(database)/documents/orchards/$(orchardId)).data.ownerId == request.auth.uid;
-      }
+      allow update, delete: if puedeGestionar();
 
       match /crops/{cropId} {
-        allow read, write: if esDueno();
+        allow read: if vePadre();
+        allow write: if gestionaPadre();
       }
-
       match /sensors/{sensorId} {
-        allow read, write: if esDueno();
-
+        allow read: if vePadre();
+        allow write: if gestionaPadre();
         match /readings/{readingId} {
-          allow read, write: if esDueno();
+          allow read: if vePadre();
+          allow write: if gestionaPadre();
         }
       }
-
       match /tasks/{taskId} {
-        allow read, write: if esDueno();
+        allow read: if vePadre();
+        allow write: if gestionaPadre();
       }
-
       match /posts/{postId} {
-        allow read, write: if esDueno();
+        allow read: if vePadre();
+        allow write: if gestionaPadre();
       }
     }
   }
