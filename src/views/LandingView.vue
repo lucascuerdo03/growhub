@@ -1,7 +1,7 @@
 <template>
   <div class="landing">
     <header class="nav">
-      <div class="brand">GrowHub 🌱</div>
+      <div class="brand">GrowHub</div>
       <div class="nav-actions">
         <router-link to="/login" class="btn-ghost">Iniciar sesión</router-link>
         <router-link to="/register" class="btn-solid">Registrarse</router-link>
@@ -10,40 +10,39 @@
 
     <section class="hero">
       <div class="hero-inner">
-        <span class="eyebrow">🌿 Gestión inteligente de huertos</span>
+        <span class="eyebrow">Gestión inteligente de huertos</span>
         <h1>Cultiva mejor con <span>GrowHub</span></h1>
         <p class="tagline">
           Controla tus huertos, cultivos y sensores desde un solo lugar.
           Datos en tiempo real, tareas de riego y un cuaderno de campo colaborativo.
         </p>
         <div class="hero-cta">
-          <router-link to="/register" class="btn-solid big">Empezar gratis</router-link>
-          <router-link to="/login" class="btn-ghost big">Ya tengo cuenta</router-link>
+          <router-link to="/register" class="btn-solid big">Crear cuenta</router-link>
+          <router-link to="/login" class="btn-ghost big">Iniciar sesión</router-link>
         </div>
       </div>
-      <div class="hero-blob"></div>
     </section>
 
     <section class="features">
       <article class="feature">
-        <span class="f-ic" style="--bg:#e0f2fe">🌱</span>
+        <span class="f-ic"><Sprout :size="22" /></span>
         <h3>Gestión de huertos</h3>
         <p>Organiza tus huertos y cultivos, con ubicación en el mapa y fichas detalladas.</p>
       </article>
       <article class="feature">
-        <span class="f-ic" style="--bg:#dcfce7">📡</span>
-        <h3>Sensores en tiempo real</h3>
+        <span class="f-ic"><Radio :size="22" /></span>
+        <h3>Sensores</h3>
         <p>Temperatura, humedad y luz con histórico y gráficas claras de cada sensor.</p>
       </article>
       <article class="feature">
-        <span class="f-ic" style="--bg:#fef3c7">✅</span>
+        <span class="f-ic"><ListChecks :size="22" /></span>
         <h3>Tareas de riego</h3>
-        <p>Planifica el riego, marca tareas completadas y no te pierdas nada.</p>
+        <p>Planifica el riego y marca las tareas completadas.</p>
       </article>
       <article class="feature">
-        <span class="f-ic" style="--bg:#ede9fe">📖</span>
+        <span class="f-ic"><BookOpen :size="22" /></span>
         <h3>Cuaderno de campo</h3>
-        <p>Comparte actualizaciones, notas y fotos con tu equipo o tu comunidad.</p>
+        <p>Registra actualizaciones, notas y fotos de cada huerto.</p>
       </article>
     </section>
 
@@ -62,6 +61,7 @@
 <script setup>
 // Página pública de entrada. Los usuarios ya logueados se redirigen al
 // dashboard desde el guard del router.
+import { Sprout, Radio, ListChecks, BookOpen } from 'lucide-vue-next'
 </script>
 
 <style scoped>
@@ -151,19 +151,6 @@
   gap: 12px;
   flex-wrap: wrap;
 }
-.hero-blob {
-  position: absolute;
-  top: -80px;
-  right: -120px;
-  width: 460px;
-  height: 460px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, #bae6fd, transparent 70%),
-    radial-gradient(circle at 70% 70%, #bbf7d0, transparent 70%);
-  filter: blur(10px);
-  opacity: 0.8;
-  z-index: 1;
-}
 .features {
   max-width: 1120px;
   margin: 0 auto;
@@ -186,8 +173,8 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-md);
-  background: var(--bg);
-  font-size: 1.5rem;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
   margin-bottom: 14px;
 }
 .feature h3 {
@@ -199,7 +186,7 @@
   font-size: 0.92rem;
 }
 .cta-band {
-  background: linear-gradient(120deg, var(--color-primary), var(--color-secondary));
+  background: #0f2740;
   color: #fff;
   text-align: center;
   padding: 56px 28px;

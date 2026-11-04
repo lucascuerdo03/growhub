@@ -8,6 +8,7 @@ import DashboardView from '../views/DashboardView.vue'
 import ProfileView from '../views/ProfileView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import BibliotecaView from '../views/BibliotecaView.vue'
+import VerifyEmailView from '../views/VerifyEmailView.vue'
 import MainLayout from '../layouts/MainLayout.vue'
 import { waitForAuth } from '../composables/useAuth'
 
@@ -32,6 +33,7 @@ const routes = [
     component: ForgotPasswordView,
     meta: { requiresGuest: true },
   },
+  { path: '/verify-email', component: VerifyEmailView },
 
   // App autenticada (comparte el prefijo '/', pero sin hijo índice, de modo
   // que '/' resuelve a la landing y '/dashboard', etc. a esta rama).
@@ -60,13 +62,28 @@ const router = createRouter({
   routes,
 })
 
-// Guard global: espera a conocer el estado de sesión antes de decidir.
+// Guard global: controla sesión y verificación de email.
 router.beforeEach(async (to) => {
   const user = await waitForAuth()
-  if (to.meta.requiresAuth && !user) return '/login'
-  if (to.meta.requiresGuest && user) return '/dashboard'
-  // Un usuario con sesión no ve la landing: directo al dashboard.
-  if (to.path === '/' && user) return '/dashboard'
+  const verificado = !!user?.emailVerified
+
+  // Pantalla de verificación: requiere sesión; si ya está verificado, al panel.
+  if (to.path === '/verify-email') {
+    if (!user) return '/login'
+    if (verificado) return '/dashboard'
+    return true
+  }
+
+  // Rutas protegidas: hace falta sesión y email verificado.
+  if (to.meta.requiresAuth) {
+    if (!user) return '/login'
+    if (!verificado) return '/verify-email'
+    return true
+  }
+
+  // Páginas de invitado (login/registro/recuperar): solo si no hay sesión válida.
+  if (to.meta.requiresGuest && user && verificado) return '/dashboard'
+  if (to.path === '/' && user && verificado) return '/dashboard'
   return true
 })
 

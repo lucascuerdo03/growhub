@@ -1,7 +1,7 @@
 <template>
   <div class="auth-container">
     <div class="auth-card">
-      <h1>GrowHub 🌱</h1>
+      <h1>GrowHub</h1>
       <p class="subtitle">Recuperar contraseña</p>
 
       <form @submit.prevent="submit">

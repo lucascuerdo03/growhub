@@ -1,23 +1,23 @@
 <template>
   <div>
     <header class="page-head">
-      <h1>📚 Biblioteca de Cultivos</h1>
+      <h1>Biblioteca de cultivos</h1>
       <p class="sub">Consulta la ficha de cada cultivo y añádelo a tus huertos.</p>
     </header>
 
-    <input v-model="search" class="search" placeholder="🔍  Buscar cultivo (tomate, lechuga, pimiento…)" />
+    <input v-model="search" class="search" placeholder="Buscar cultivo (tomate, lechuga, pimiento…)" />
 
     <p v-if="!filtrados.length" class="muted">No se encontró ningún cultivo.</p>
 
     <div class="grid">
       <button v-for="c in filtrados" :key="c.id" class="crop-card" @click="abrir(c)">
-        <div class="thumb" :style="{ background: gradiente(c.id) }">{{ c.emoji }}</div>
+        <div class="thumb"><Leaf :size="30" /></div>
         <div class="body">
           <h3>{{ c.nombre }}</h3>
           <span class="fam">{{ c.familia }}</span>
           <div class="facts">
-            <span>🌡️ {{ c.tempIdeal }}</span>
-            <span>⏳ {{ c.tiempoCosecha }}</span>
+            <span>Temp. ideal: {{ c.tempIdeal }}</span>
+            <span>Cosecha: {{ c.tiempoCosecha }}</span>
           </div>
         </div>
       </button>
@@ -25,8 +25,8 @@
 
     <!-- Ficha + añadir -->
     <BaseModal v-if="sel" :title="sel.nombre" @close="cerrar">
-      <div class="ficha-head" :style="{ background: gradiente(sel.id) }">
-        <span class="ficha-emoji">{{ sel.emoji }}</span>
+      <div class="ficha-head">
+        <Leaf :size="40" />
       </div>
       <dl class="ficha">
         <div><dt>Familia botánica</dt><dd>{{ sel.familia }}</dd></div>
@@ -57,7 +57,7 @@
           :disabled="!huertos.length || adding"
           @click="anadir"
         >
-          {{ adding ? 'Añadiendo…' : '＋ Añadir a mi huerto' }}
+          {{ adding ? 'Añadiendo…' : 'Añadir a mi huerto' }}
         </button>
       </template>
     </BaseModal>
@@ -66,6 +66,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { Leaf } from 'lucide-vue-next'
 import { useAuth } from '../composables/useAuth'
 import BaseModal from '../components/BaseModal.vue'
 import { CROPS_LIBRARY } from '../data/cropsLibrary'
@@ -78,19 +79,6 @@ const sel = ref(null)
 const destino = ref(null)
 const adding = ref(false)
 const addMsg = ref('')
-
-const GRADIENTES = {
-  Solanáceas: 'linear-gradient(135deg,#ef4444,#f97316)',
-  Cucurbitáceas: 'linear-gradient(135deg,#22c55e,#16a34a)',
-  Brasicáceas: 'linear-gradient(135deg,#10b981,#0d9488)',
-  Fabáceas: 'linear-gradient(135deg,#84cc16,#65a30d)',
-  Amarilidáceas: 'linear-gradient(135deg,#a855f7,#7c3aed)',
-  Asteráceas: 'linear-gradient(135deg,#14b8a6,#0891b2)',
-}
-function gradiente(id) {
-  const c = CROPS_LIBRARY.find((x) => x.id === id)
-  return GRADIENTES[c?.familia] || 'linear-gradient(135deg,#0ea5e9,#2563eb)'
-}
 
 const filtrados = computed(() => {
   const q = search.value.trim().toLowerCase()
@@ -126,7 +114,7 @@ async function anadir() {
       tiempoCosecha: c.tiempoCosecha,
     })
     const nombreHuerto = huertos.value.find((h) => h.id === destino.value)?.nombre
-    addMsg.value = `✓ "${c.nombre}" añadido a ${nombreHuerto}.`
+    addMsg.value = `"${c.nombre}" añadido a ${nombreHuerto}.`
   } catch (e) {
     addMsg.value = 'No se pudo añadir el cultivo.'
     console.error(e)
@@ -189,7 +177,8 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 3rem;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
 }
 .body {
   padding: 14px 16px;
@@ -217,9 +206,8 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   margin-bottom: 16px;
-}
-.ficha-emoji {
-  font-size: 3.6rem;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
 }
 .ficha {
   margin: 0;

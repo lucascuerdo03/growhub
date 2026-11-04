@@ -20,34 +20,16 @@ import { db } from '../firebase'
 
 const porFecha = (a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
 
-// Huertos del usuario: los que posee + aquellos en los que colabora (por email).
-export const getHuertos = async (uid, email = null) => {
-  const consultas = [getDocs(query(collection(db, 'orchards'), where('ownerId', '==', uid)))]
-  if (email) {
-    consultas.push(
-      getDocs(query(collection(db, 'orchards'), where('colaboradoresEmails', 'array-contains', email))),
-    )
-  }
-  const snaps = await Promise.all(consultas)
-  const mapa = new Map()
-  snaps.forEach((snap) =>
-    snap.docs.forEach((d) => mapa.set(d.id, { id: d.id, ...d.data(), esPropio: d.data().ownerId === uid })),
-  )
-  return [...mapa.values()].sort(porFecha)
-}
-
-// Huertos públicos de OTROS usuarios (para la pestaña Comunidad).
-export const getHuertosPublicos = async (uid) => {
-  const snap = await getDocs(query(collection(db, 'orchards'), where('publico', '==', true)))
-  return snap.docs
-    .map((d) => ({ id: d.id, ...d.data() }))
-    .filter((h) => h.ownerId !== uid)
-    .sort(porFecha)
+// Huertos del usuario (solo los que posee). Una única consulta simple que
+// funciona con reglas de solo-dueño.
+export const getHuertos = async (uid) => {
+  const snap = await getDocs(query(collection(db, 'orchards'), where('ownerId', '==', uid)))
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort(porFecha)
 }
 
 export const createHuerto = async (
   uid,
-  { nombre, descripcion = '', lat = null, lng = null, imagen = '', publico = false, ownerNombre = '' },
+  { nombre, descripcion = '', lat = null, lng = null, imagen = '' },
 ) => {
   const ref = await addDoc(collection(db, 'orchards'), {
     nombre,
@@ -55,8 +37,6 @@ export const createHuerto = async (
     lat,
     lng,
     imagen,
-    publico,
-    colaboradoresEmails: [],
     ownerId: uid,
     ownerNombre,
     createdAt: serverTimestamp(),
@@ -272,8 +252,8 @@ export const getAllSensores = async (uid) => {
 
 // Resumen para el dashboard: huertos enriquecidos con sus contadores
 // (cultivos, tareas pendientes, sensores) y los totales globales.
-export const getResumen = async (uid, email = null) => {
-  const huertos = await getHuertos(uid, email)
+export const getResumen = async (uid) => {
+  const huertos = await getHuertos(uid)
   const detalles = await Promise.all(
     huertos.map(async (h) => {
       const [crops, tasks, sensors] = await Promise.all([

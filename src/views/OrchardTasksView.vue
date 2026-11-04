@@ -44,7 +44,7 @@
           <p v-if="t.descripcion" class="desc">{{ t.descripcion }}</p>
           <div class="tags">
             <span class="tag crop">{{ t.cropNombre || 'Huerto general' }}</span>
-            <span v-if="t.frecuenciaRiego" class="tag water">💧 {{ t.frecuenciaRiego }}</span>
+            <span v-if="t.frecuenciaRiego" class="tag water">Riego: {{ t.frecuenciaRiego }}</span>
           </div>
         </div>
         <button class="del" @click="remove(t)">✕</button>

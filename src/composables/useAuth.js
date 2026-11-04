@@ -10,7 +10,13 @@ const ready = ref(false)
 
 function mapUser(u) {
   return u
-    ? { uid: u.uid, email: u.email, displayName: u.displayName, photoURL: u.photoURL }
+    ? {
+        uid: u.uid,
+        email: u.email,
+        displayName: u.displayName,
+        photoURL: u.photoURL,
+        emailVerified: u.emailVerified,
+      }
     : null
 }
 
@@ -23,6 +29,16 @@ onAuthStateChanged(auth, (u) => {
 // Útil tras actualizar el perfil.
 export const refreshUser = () => {
   user.value = mapUser(auth.currentUser)
+}
+
+// Recarga el usuario desde Firebase (p. ej. para comprobar si ya verificó
+// el email) y actualiza el estado reactivo.
+export const reloadUser = async () => {
+  if (auth.currentUser) {
+    await auth.currentUser.reload()
+    user.value = mapUser(auth.currentUser)
+  }
+  return user.value
 }
 
 // Promesa que resuelve cuando ya sabemos si hay sesión o no.

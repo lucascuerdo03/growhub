@@ -10,17 +10,17 @@
       <section class="card ficha">
         <div class="thumb" :class="{ photo: cultivo.foto }"
              :style="cultivo.foto ? { backgroundImage: `url(${cultivo.foto})` } : null">
-          <span v-if="!cultivo.foto">🌿</span>
+          <Leaf v-if="!cultivo.foto" :size="46" />
         </div>
         <div class="ficha-body">
           <div class="ficha-head">
             <h1>{{ cultivo.nombre }}</h1>
-            <button class="edit-btn" @click="editing = !editing">{{ editing ? 'Cancelar' : '✎ Editar' }}</button>
+            <button class="edit-btn" @click="editing = !editing">{{ editing ? 'Cancelar' : 'Editar' }}</button>
           </div>
           <div class="pills">
             <span v-if="cultivo.especie" class="pill type">{{ cultivo.especie }}</span>
             <span v-if="cultivo.familia" class="pill">{{ cultivo.familia }}</span>
-            <span v-if="cultivo.fechaSiembra" class="pill">📅 Siembra: {{ cultivo.fechaSiembra }}</span>
+            <span v-if="cultivo.fechaSiembra" class="pill">Siembra: {{ cultivo.fechaSiembra }}</span>
           </div>
           <p v-if="cultivo.descripcion" class="desc">{{ cultivo.descripcion }}</p>
 
@@ -57,7 +57,7 @@
 
       <!-- Sensores vinculados -->
       <section class="card">
-        <h2 class="section-title">📡 Sensores del cultivo</h2>
+        <h2 class="section-title">Sensores del cultivo</h2>
 
         <div class="link-row">
           <select v-model="sensorAVincular">
@@ -76,8 +76,8 @@
         <div class="metric-grid">
           <div v-for="s in sensoresCultivo" :key="s.id" class="metric">
             <header>
-              <span class="icon-box" :style="{ background: SENSOR_TYPES[s.tipo]?.tint }">
-                {{ SENSOR_TYPES[s.tipo]?.icon }}
+              <span class="icon-box" :style="{ background: SENSOR_TYPES[s.tipo]?.tint, color: SENSOR_TYPES[s.tipo]?.color }">
+                <component :is="SENSOR_TYPES[s.tipo]?.icon" :size="20" />
               </span>
               <div class="meta">
                 <span class="label">{{ SENSOR_TYPES[s.tipo]?.label }}</span>
@@ -101,6 +101,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { Leaf } from 'lucide-vue-next'
 import SensorChart from '../components/SensorChart.vue'
 import { SENSOR_TYPES } from '../utils/sensorTypes'
 import {
@@ -171,7 +172,7 @@ async function guardar() {
     }
     await updateCultivo(orchardId, cropId, data)
     cultivo.value = { ...cultivo.value, ...data }
-    savedMsg.value = '✓ Cambios guardados.'
+    savedMsg.value = 'Cambios guardados.'
   } catch (e) {
     savedMsg.value = 'No se pudo guardar.'
     console.error(e)

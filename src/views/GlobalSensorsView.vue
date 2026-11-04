@@ -25,14 +25,14 @@
     <div v-else class="sensor-grid">
       <div v-for="s in sensores" :key="s.orchardId + s.id" class="sensor-card">
         <header>
-          <span class="icon-box" :style="{ background: SENSOR_TYPES[s.tipo]?.tint }">
-            {{ SENSOR_TYPES[s.tipo]?.icon }}
+          <span class="icon-box" :style="{ background: SENSOR_TYPES[s.tipo]?.tint, color: SENSOR_TYPES[s.tipo]?.color }">
+            <component :is="SENSOR_TYPES[s.tipo]?.icon" :size="22" />
           </span>
           <div class="meta">
             <span class="label">{{ SENSOR_TYPES[s.tipo]?.label }}</span>
             <h3>{{ s.nombre }}</h3>
             <router-link :to="`/orchard/${s.orchardId}`" class="orchard-link">
-              🌱 {{ s.orchardNombre }}
+              {{ s.orchardNombre }}
             </router-link>
           </div>
         </header>

@@ -2,14 +2,14 @@
   <div class="app">
     <header class="navbar">
       <div class="nav-content">
-        <router-link to="/dashboard" class="brand">GrowHub 🌱</router-link>
+        <router-link to="/dashboard" class="brand">GrowHub</router-link>
 
         <nav class="nav-links" :class="{ open }" @click="open = false">
-          <router-link to="/dashboard"><span class="ic">🌱</span> Mis Huertos</router-link>
-          <router-link to="/tasks"><span class="ic">✅</span> Tareas</router-link>
-          <router-link to="/sensors"><span class="ic">📡</span> Sensores</router-link>
-          <router-link to="/biblioteca"><span class="ic">📚</span> Biblioteca</router-link>
-          <router-link to="/settings"><span class="ic">⚙️</span> Ajustes</router-link>
+          <router-link to="/dashboard">Huertos</router-link>
+          <router-link to="/tasks">Tareas</router-link>
+          <router-link to="/sensors">Sensores</router-link>
+          <router-link to="/biblioteca">Biblioteca</router-link>
+          <router-link to="/settings">Ajustes</router-link>
         </nav>
 
         <div class="nav-right">
@@ -17,8 +17,12 @@
             <img v-if="user?.photoURL" :src="user.photoURL" alt="" />
             <span v-else>{{ initial }}</span>
           </router-link>
-          <button class="logout" @click="logout" title="Cerrar sesión">Salir</button>
-          <button class="burger" @click="open = !open" aria-label="Menú">☰</button>
+          <button class="logout" @click="logout" title="Cerrar sesión">
+            <LogOut :size="18" />
+          </button>
+          <button class="burger" @click="open = !open" aria-label="Menú">
+            <Menu :size="22" />
+          </button>
         </div>
       </div>
     </header>
@@ -34,6 +38,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { LogOut, Menu } from 'lucide-vue-next'
 import { logoutUser } from '../services/authService'
 import { useAuth } from '../composables/useAuth'
 
@@ -56,9 +61,9 @@ async function logout() {
   min-height: 100vh;
 }
 .navbar {
-  background: var(--color-navbar);
+  background: var(--color-surface);
   box-shadow: var(--shadow-card);
-  border-bottom: 1px solid var(--color-border-soft);
+  border-bottom: 1px solid var(--color-border);
   padding: 0.85rem 1.5rem;
   position: sticky;
   top: 0;
@@ -69,7 +74,7 @@ async function logout() {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  max-width: 1200px;
+  max-width: 1160px;
   margin: 0 auto;
 }
 .brand {
@@ -78,23 +83,21 @@ async function logout() {
   color: var(--color-text);
   text-decoration: none;
   white-space: nowrap;
+  letter-spacing: -0.01em;
 }
 .nav-links {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   flex: 1;
-  margin-left: 12px;
+  margin-left: 20px;
 }
 .nav-links a {
-  display: flex;
-  align-items: center;
-  gap: 7px;
   color: var(--color-text-soft);
   padding: 8px 14px;
   border-radius: var(--radius-sm);
   text-decoration: none;
-  font-weight: 600;
+  font-weight: 500;
   font-size: 0.92rem;
   transition: background 0.15s, color 0.15s;
 }
@@ -112,15 +115,16 @@ async function logout() {
   gap: 10px;
 }
 .nav-avatar {
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: var(--color-primary);
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
+  font-weight: 600;
+  font-size: 0.9rem;
   overflow: hidden;
   text-decoration: none;
   flex-shrink: 0;
@@ -131,14 +135,15 @@ async function logout() {
   object-fit: cover;
 }
 .logout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: 1px solid var(--color-border);
   color: var(--color-text-soft);
-  padding: 8px 14px;
+  padding: 7px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 0.85rem;
-  font-weight: 600;
 }
 .logout:hover {
   background: var(--color-border-soft);
@@ -146,23 +151,25 @@ async function logout() {
 }
 .burger {
   display: none;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: none;
-  font-size: 1.4rem;
   cursor: pointer;
   color: var(--color-text);
+  padding: 4px;
 }
 .content {
   padding: 32px 24px 48px;
 }
 .container {
-  max-width: 1200px;
+  max-width: 1160px;
   margin: 0 auto;
 }
 
 @media (max-width: 760px) {
   .burger {
-    display: block;
+    display: flex;
   }
   .nav-links {
     position: absolute;
@@ -173,7 +180,7 @@ async function logout() {
     align-items: stretch;
     gap: 2px;
     background: var(--color-surface);
-    border-bottom: 1px solid var(--color-border-soft);
+    border-bottom: 1px solid var(--color-border);
     padding: 10px 14px;
     margin: 0;
     box-shadow: var(--shadow-elevated);

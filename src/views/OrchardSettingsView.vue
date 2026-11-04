@@ -21,13 +21,8 @@
         <p class="hint">Haz clic en el mapa para marcar la ubicación exacta.</p>
         <LocationMap :lat="lat" :lng="lng" editable @update="onPick" />
         <p class="coords" v-if="lat != null">
-          📍 {{ lat.toFixed(5) }}, {{ lng.toFixed(5) }}
+          Coordenadas: {{ lat.toFixed(5) }}, {{ lng.toFixed(5) }}
         </p>
-
-        <label class="check">
-          <input type="checkbox" v-model="publico" />
-          <span>Huerto público (visible en la Comunidad)</span>
-        </label>
 
         <p v-if="error" class="error">{{ error }}</p>
         <p v-if="saved" class="success">Cambios guardados.</p>
@@ -37,26 +32,9 @@
         </button>
       </form>
 
-      <!-- Equipo -->
-      <section class="team">
-        <h3>👥 Equipo del huerto</h3>
-        <p class="hint">Añade colaboradores por email. Podrán ver y editar este huerto.</p>
-        <form class="team-add" @submit.prevent="addEmail">
-          <input v-model="nuevoEmail" type="email" placeholder="colaborador@email.com" />
-          <button type="submit" :disabled="!nuevoEmail.trim()">Añadir</button>
-        </form>
-        <p v-if="teamMsg" class="hint">{{ teamMsg }}</p>
-        <ul v-if="colaboradores.length" class="team-list">
-          <li v-for="em in colaboradores" :key="em">
-            <span>👤 {{ em }}</span>
-            <button class="del-sm" @click="removeEmail(em)">Quitar</button>
-          </li>
-        </ul>
-        <p v-else class="muted small">Todavía no hay colaboradores.</p>
-      </section>
-
       <div class="danger">
-        <h3>Zona peligrosa</h3>
+        <h3>Eliminar huerto</h3>
+        <p class="hint">Esta acción es permanente y no se puede deshacer.</p>
         <button class="del" @click="remove">Eliminar huerto</button>
       </div>
     </template>
@@ -73,8 +51,6 @@ import {
   getHuerto,
   updateHuerto,
   deleteHuerto,
-  addColaborador,
-  removeColaborador,
 } from '../services/firestoreService'
 
 const route = useRoute()
@@ -82,10 +58,6 @@ const router = useRouter()
 const orchardId = route.params.id
 
 const huerto = ref(null)
-const publico = ref(false)
-const colaboradores = ref([])
-const nuevoEmail = ref('')
-const teamMsg = ref('')
 const nombre = ref('')
 const descripcion = ref('')
 const imagen = ref('')
@@ -110,8 +82,6 @@ async function load() {
       nombre.value = huerto.value.nombre || ''
       descripcion.value = huerto.value.descripcion || ''
       imagen.value = huerto.value.imagen || ''
-      publico.value = huerto.value.publico || false
-      colaboradores.value = huerto.value.colaboradoresEmails || []
       lat.value = huerto.value.lat ?? null
       lng.value = huerto.value.lng ?? null
     }
@@ -132,7 +102,6 @@ async function save() {
       nombre: nombre.value.trim(),
       descripcion: descripcion.value.trim(),
       imagen: imagen.value.trim(),
-      publico: publico.value,
       lat: lat.value,
       lng: lng.value,
     })
@@ -142,30 +111,6 @@ async function save() {
     console.error(e)
   } finally {
     saving.value = false
-  }
-}
-
-async function addEmail() {
-  const em = nuevoEmail.value.trim().toLowerCase()
-  if (!em) return
-  teamMsg.value = ''
-  try {
-    await addColaborador(orchardId, em)
-    if (!colaboradores.value.includes(em)) colaboradores.value.push(em)
-    nuevoEmail.value = ''
-    teamMsg.value = `✓ ${em} añadido.`
-  } catch (e) {
-    teamMsg.value = 'No se pudo añadir el colaborador.'
-    console.error(e)
-  }
-}
-
-async function removeEmail(em) {
-  try {
-    await removeColaborador(orchardId, em)
-    colaboradores.value = colaboradores.value.filter((x) => x !== em)
-  } catch (e) {
-    console.error(e)
   }
 }
 

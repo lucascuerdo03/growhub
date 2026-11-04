@@ -5,12 +5,11 @@
     <!-- Banner hero -->
     <section class="hero" :style="heroStyle">
       <div class="hero-overlay">
-        <span v-if="huerto?.publico" class="hero-badge">🌍 PÚBLICO</span>
         <h1>{{ huerto?.nombre || 'Huerto' }}</h1>
-        <p v-if="huerto?.descripcion" class="hero-loc">📍 {{ huerto.descripcion }}</p>
+        <p v-if="huerto?.descripcion" class="hero-loc">{{ huerto.descripcion }}</p>
         <div class="hero-actions">
-          <router-link :to="`/orchard/${orchardId}/sensors`" class="hero-btn">📡 Sensores</router-link>
-          <router-link :to="`/orchard/${orchardId}/settings`" class="hero-btn">⚙️ Ajustes</router-link>
+          <router-link :to="`/orchard/${orchardId}/sensors`" class="hero-btn">Sensores</router-link>
+          <router-link :to="`/orchard/${orchardId}/settings`" class="hero-btn">Ajustes</router-link>
         </div>
       </div>
     </section>
@@ -23,7 +22,7 @@
       <section class="panel">
         <h2 class="section-title">Cultivos</h2>
 
-        <input v-model="search" class="search" placeholder="🔍  Buscar por nombre o especie…" />
+        <input v-model="search" class="search" placeholder="Buscar por nombre o especie…" />
 
         <form class="inline-add" @submit.prevent="addCrop">
           <input v-model="cropNombre" placeholder="Nuevo cultivo" />
@@ -42,18 +41,20 @@
             :class="{ photo: c.foto }"
             :style="c.foto ? { backgroundImage: `url(${c.foto})` } : null"
           >
-            <span v-if="!c.foto">🌿</span>
+            <Leaf v-if="!c.foto" :size="20" />
           </div>
           <router-link :to="`/orchard/${orchardId}/crop/${c.id}`" class="crop-info">
             <strong>{{ c.nombre }}</strong>
             <span v-if="c.especie" class="pill type">{{ c.especie }}</span>
             <div v-if="c.epocaSiembra || c.riego" class="crop-meta">
-              <span v-if="c.epocaSiembra">📅 {{ c.epocaSiembra }}</span>
-              <span v-if="c.riego">💧 {{ c.riego }}</span>
+              <span v-if="c.epocaSiembra">Siembra: {{ c.epocaSiembra }}</span>
+              <span v-if="c.riego">Riego: {{ c.riego }}</span>
             </div>
           </router-link>
-          <router-link :to="`/orchard/${orchardId}/crop/${c.id}`" class="chevron" title="Ver ficha">›</router-link>
-          <button class="del" title="Eliminar" @click="removeCrop(c.id)">✕</button>
+          <router-link :to="`/orchard/${orchardId}/crop/${c.id}`" class="chevron" title="Ver ficha">
+            <ChevronRight :size="20" />
+          </router-link>
+          <button class="del" title="Eliminar" @click="removeCrop(c.id)"><X :size="15" /></button>
         </div>
       </section>
 
@@ -66,11 +67,7 @@
           <select v-model="taskFrec">
             <option v-for="f in FRECUENCIAS" :key="f" :value="f">{{ f }}</option>
           </select>
-          <select v-model="taskResp">
-            <option value="">Sin responsable</option>
-            <option v-for="m in miembros" :key="m" :value="m">{{ m }}</option>
-          </select>
-          <button type="submit" :disabled="!taskTitulo.trim()">+</button>
+          <button type="submit" :disabled="!taskTitulo.trim()"><Plus :size="18" /></button>
         </form>
 
         <p class="group-label">Pendientes</p>
@@ -79,22 +76,21 @@
           <input type="checkbox" :checked="t.completada" @change="toggleTask(t)" />
           <div class="task-info">
             <strong>{{ t.titulo }}</strong>
-            <div v-if="t.frecuenciaRiego || t.responsable" class="tags">
-              <span v-if="t.frecuenciaRiego" class="pill water">💧 {{ t.frecuenciaRiego }}</span>
-              <span v-if="t.responsable" class="pill resp">👤 {{ t.responsable }}</span>
+            <div v-if="t.frecuenciaRiego" class="tags">
+              <span class="pill water">Riego: {{ t.frecuenciaRiego }}</span>
             </div>
           </div>
-          <button class="del" @click="removeTask(t)">✕</button>
+          <button class="del" @click="removeTask(t)"><X :size="15" /></button>
         </div>
 
         <button v-if="completadas.length" class="collapse" @click="showDone = !showDone">
-          Completadas ({{ completadas.length }}) {{ showDone ? '▲' : '▼' }}
+          Completadas ({{ completadas.length }})
         </button>
         <template v-if="showDone">
           <div v-for="t in completadas" :key="t.id" class="task-card done">
             <input type="checkbox" checked @change="toggleTask(t)" />
             <div class="task-info"><strong>{{ t.titulo }}</strong></div>
-            <button class="del" @click="removeTask(t)">✕</button>
+            <button class="del" @click="removeTask(t)"><X :size="15" /></button>
           </div>
         </template>
       </section>
@@ -102,25 +98,25 @@
 
     <!-- CUADERNO DE CAMPO -->
     <section v-if="!loading" class="panel notebook">
-      <h2 class="section-title">📖 Cuaderno de Campo</h2>
+      <h2 class="section-title">Cuaderno de campo</h2>
 
       <form class="composer" @submit.prevent="publicar">
         <span class="avatar">{{ inicial }}</span>
         <div class="composer-body">
           <textarea v-model="nuevoPost" rows="2" placeholder="¿Qué está pasando en el huerto?"></textarea>
-          <input v-model="postFoto" class="post-foto-input" placeholder="📷 Foto (URL, opcional)" />
+          <input v-model="postFoto" class="post-foto-input" placeholder="Foto (URL, opcional)" />
           <div class="composer-foot">
             <button type="submit" class="publish" :disabled="publicando || !nuevoPost.trim()">
-              ➤ Publicar
+              Publicar
             </button>
           </div>
         </div>
       </form>
 
       <div v-if="!posts.length" class="empty-feed">
-        <div class="empty-emoji">💬</div>
+        <MessageSquare :size="34" class="empty-ic" />
         <p class="empty-title">Aún no hay publicaciones</p>
-        <p class="muted small">Sé el primero en compartir actualizaciones, notas o fotos de este huerto.</p>
+        <p class="muted small">Comparte actualizaciones, notas o fotos de este huerto.</p>
       </div>
 
       <article v-for="p in posts" :key="p.id" class="post">
@@ -128,9 +124,9 @@
           <span class="avatar sm">{{ (p.autorNombre || '?').charAt(0).toUpperCase() }}</span>
           <div>
             <strong>{{ p.autorNombre || 'Usuario' }}</strong>
-            <span class="post-time">🕐 {{ fecha(p.createdAt) }}</span>
+            <span class="post-time">{{ fecha(p.createdAt) }}</span>
           </div>
-          <button v-if="p.autorId === user?.uid" class="del" @click="removePost(p)">✕</button>
+          <button v-if="p.autorId === user?.uid" class="del" @click="removePost(p)"><X :size="15" /></button>
         </header>
         <p class="post-text">{{ p.texto }}</p>
         <img v-if="p.foto" :src="p.foto" alt="" class="post-img" />
@@ -142,6 +138,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { X, ChevronRight, Leaf, Plus, MessageSquare } from 'lucide-vue-next'
 import { useAuth } from '../composables/useAuth'
 import {
   getHuerto,
@@ -176,7 +173,6 @@ const cropEspecie = ref('')
 const cropFoto = ref('')
 const taskTitulo = ref('')
 const taskFrec = ref('Cada 2-3 días')
-const taskResp = ref('')
 const showDone = ref(false)
 const nuevoPost = ref('')
 const postFoto = ref('')
@@ -185,14 +181,6 @@ const publicando = ref(false)
 const inicial = computed(() =>
   (user.value?.displayName || user.value?.email || '?').charAt(0).toUpperCase(),
 )
-// Miembros a los que asignar tareas: dueño (tú) + colaboradores.
-const miembros = computed(() => {
-  const lista = []
-  const yo = user.value?.displayName || user.value?.email
-  if (yo) lista.push(yo)
-  ;(huerto.value?.colaboradoresEmails || []).forEach((em) => lista.push(em))
-  return lista
-})
 const heroStyle = computed(() =>
   huerto.value?.imagen ? { backgroundImage: `url(${huerto.value.imagen})` } : {},
 )
@@ -280,10 +268,8 @@ async function addTask() {
     await createTarea(orchardId, {
       titulo: taskTitulo.value.trim(),
       frecuenciaRiego: taskFrec.value,
-      responsable: taskResp.value,
     })
     taskTitulo.value = ''
-    taskResp.value = ''
     tareas.value = await getTareas(orchardId)
   } catch (e) {
     error.value = 'No se pudo crear la tarea.'
@@ -299,7 +285,7 @@ async function toggleTask(t) {
     // Al completar una tarea se publica automáticamente en el cuaderno.
     if (nuevo) {
       await createPost(orchardId, {
-        texto: `✅ He completado la tarea: ${t.titulo}`,
+        texto: `He completado la tarea: ${t.titulo}`,
         ...autorInfo(),
       })
       posts.value = await getPosts(orchardId)
@@ -363,8 +349,8 @@ onMounted(load)
   font-size: 0.9rem;
 }
 .hero {
-  border-radius: var(--radius-lg);
-  background: linear-gradient(120deg, var(--color-primary), var(--color-secondary));
+  border-radius: var(--radius-md);
+  background: #0f2740;
   background-size: cover;
   background-position: center;
   margin-bottom: 28px;
@@ -372,8 +358,8 @@ onMounted(load)
   box-shadow: var(--shadow-card);
 }
 .hero-overlay {
-  padding: 48px 32px 38px;
-  background: linear-gradient(0deg, rgba(15, 23, 42, 0.75), rgba(15, 23, 42, 0.25));
+  padding: 40px 32px 34px;
+  background: linear-gradient(0deg, rgba(15, 23, 42, 0.78), rgba(15, 23, 42, 0.35));
 }
 .hero h1 {
   margin: 0;
@@ -679,8 +665,9 @@ onMounted(load)
   padding: 36px;
   color: var(--color-text-soft);
 }
-.empty-emoji {
-  font-size: 2.4rem;
+.empty-ic {
+  color: var(--color-text-soft);
+  opacity: 0.6;
 }
 .empty-title {
   font-weight: 700;
@@ -713,14 +700,20 @@ onMounted(load)
   white-space: pre-wrap;
 }
 .del {
+  display: flex;
+  align-items: center;
   background: transparent;
   border: none;
-  color: #cbd5e1;
+  color: #94a3b8;
   cursor: pointer;
-  font-size: 0.9rem;
+  padding: 2px;
 }
 .del:hover {
   color: var(--color-danger);
+}
+.chevron {
+  display: flex;
+  align-items: center;
 }
 .muted {
   color: var(--color-text-soft);

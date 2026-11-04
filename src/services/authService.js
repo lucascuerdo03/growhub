@@ -2,6 +2,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
+  sendEmailVerification,
   signOut,
   updateProfile,
 } from 'firebase/auth'
@@ -15,7 +16,15 @@ export const registerUser = async (email, password, displayName) => {
   if (displayName) {
     await updateProfile(cred.user, { displayName })
   }
+  // Enviamos el correo de verificación tras crear la cuenta.
+  await sendEmailVerification(cred.user)
   return cred
+}
+
+// Reenvía el correo de verificación al usuario que esté en sesión.
+export const resendVerification = () => {
+  if (auth.currentUser) return sendEmailVerification(auth.currentUser)
+  return Promise.reject(new Error('No hay sesión activa.'))
 }
 
 export const resetPassword = (email) => sendPasswordResetEmail(auth, email)

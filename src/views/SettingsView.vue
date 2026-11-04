@@ -30,12 +30,12 @@
       <ul v-else class="orchard-list">
         <li v-for="h in huertos" :key="h.id">
           <div class="o-info">
-            <strong>🌱 {{ h.nombre }}</strong>
-            <span v-if="h.lat != null" class="muted small">📍 Ubicación definida</span>
+            <strong>{{ h.nombre }}</strong>
+            <span v-if="h.lat != null" class="muted small">Ubicación definida</span>
             <span v-else class="muted small">Sin ubicación</span>
           </div>
           <div class="o-actions">
-            <router-link :to="`/orchard/${h.id}/settings`" class="btn-soft">⚙️ Ajustes</router-link>
+            <router-link :to="`/orchard/${h.id}/settings`" class="btn-soft">Ajustes</router-link>
             <button class="btn-danger" @click="remove(h)">Eliminar</button>
           </div>
         </li>

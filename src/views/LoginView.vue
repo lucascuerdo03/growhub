@@ -1,7 +1,7 @@
 <template>
   <div class="auth-container">
     <div class="auth-card">
-      <h1>GrowHub 🌱</h1>
+      <h1>GrowHub</h1>
       <p class="subtitle">Inicia sesión para continuar</p>
 
       <form @submit.prevent="login">
@@ -39,6 +39,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { loginUser, authErrorMessage } from '../services/authService'
+import { reloadUser } from '../composables/useAuth'
 import '../assets/auth.css'
 
 const router = useRouter()
@@ -52,7 +53,9 @@ async function login() {
   loading.value = true
   try {
     await loginUser(email.value, password.value)
-    router.push('/dashboard')
+    const u = await reloadUser()
+    // Si el email no está verificado, a la pantalla de confirmación.
+    router.push(u?.emailVerified ? '/dashboard' : '/verify-email')
   } catch (e) {
     error.value = authErrorMessage(e.code)
   } finally {

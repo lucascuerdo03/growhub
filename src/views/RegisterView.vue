@@ -1,7 +1,7 @@
 <template>
   <div class="auth-container">
     <div class="auth-card">
-      <h1>GrowHub 🌱</h1>
+      <h1>GrowHub</h1>
       <p class="subtitle">Crea tu cuenta</p>
 
       <form @submit.prevent="register">
@@ -52,7 +52,8 @@ async function register() {
   loading.value = true
   try {
     await registerUser(email.value, password.value, name.value)
-    router.push('/dashboard')
+    // La cuenta se crea sin verificar: vamos a la pantalla de confirmación.
+    router.push('/verify-email')
   } catch (e) {
     error.value = authErrorMessage(e.code)
   } finally {
