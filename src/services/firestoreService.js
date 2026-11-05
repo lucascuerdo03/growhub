@@ -38,7 +38,6 @@ export const createHuerto = async (
     lng,
     imagen,
     ownerId: uid,
-    ownerNombre,
     createdAt: serverTimestamp(),
   })
   return ref.id
