@@ -2,33 +2,55 @@
   <div>
     <header class="page-head">
       <h1>Biblioteca de cultivos</h1>
-      <p class="sub">Consulta la ficha de cada cultivo y añádelo a tus huertos.</p>
+      <p class="sub">Consulta la ficha de cada cultivo y variedad, y añádelo a tus huertos.</p>
     </header>
 
-    <input v-model="search" class="search" placeholder="Buscar cultivo (tomate, lechuga, pimiento…)" />
+    <input
+      v-model="search"
+      class="search"
+      placeholder="Buscar cultivo o variedad (tomate, raf, padrón…)"
+    />
 
-    <p v-if="!filtrados.length" class="muted">No se encontró ningún cultivo.</p>
+    <p v-if="!grupos.length" class="muted">No se encontró ningún cultivo.</p>
 
-    <div class="grid">
-      <button v-for="c in filtrados" :key="c.id" class="crop-card" @click="abrir(c)">
-        <div class="thumb"><Leaf :size="30" /></div>
-        <div class="body">
-          <h3>{{ c.nombre }}</h3>
-          <span class="fam">{{ c.familia }}</span>
-          <div class="facts">
-            <span>Temp. ideal: {{ c.tempIdeal }}</span>
-            <span>Cosecha: {{ c.tiempoCosecha }}</span>
+    <section v-for="g in grupos" :key="g.cultivo" class="group">
+      <h2 class="group-title">
+        {{ g.cultivo }}
+        <span class="group-count">{{ g.items.length }} {{ g.items.length === 1 ? 'variedad' : 'variedades' }}</span>
+      </h2>
+      <div class="grid">
+        <button v-for="c in g.items" :key="c.id" class="crop-card" @click="abrir(c)">
+          <div
+            class="thumb"
+            :class="{ photo: c.foto }"
+            :style="c.foto ? { backgroundImage: `url(${c.foto})` } : null"
+          >
+            <Leaf v-if="!c.foto" :size="28" />
           </div>
-        </div>
-      </button>
-    </div>
+          <div class="body">
+            <h3>{{ c.variedad || c.cultivo }}</h3>
+            <span class="fam">{{ c.familia }}</span>
+            <div class="facts">
+              <span>Temp. ideal: {{ c.tempIdeal }}</span>
+              <span>Cosecha: {{ c.tiempoCosecha }}</span>
+            </div>
+          </div>
+        </button>
+      </div>
+    </section>
 
     <!-- Ficha + añadir -->
     <BaseModal v-if="sel" :title="sel.nombre" @close="cerrar">
-      <div class="ficha-head">
-        <Leaf :size="40" />
+      <div
+        class="ficha-head"
+        :class="{ photo: sel.foto }"
+        :style="sel.foto ? { backgroundImage: `url(${sel.foto})` } : null"
+      >
+        <Leaf v-if="!sel.foto" :size="40" />
       </div>
       <dl class="ficha">
+        <div><dt>Cultivo</dt><dd>{{ sel.cultivo }}</dd></div>
+        <div v-if="sel.variedad"><dt>Variedad</dt><dd>{{ sel.variedad }}</dd></div>
         <div><dt>Familia botánica</dt><dd>{{ sel.familia }}</dd></div>
         <div><dt>Época de siembra</dt><dd>{{ sel.epocaSiembra }}</dd></div>
         <div><dt>Riego</dt><dd>{{ sel.riego }}</dd></div>
@@ -80,12 +102,23 @@ const destino = ref(null)
 const adding = ref(false)
 const addMsg = ref('')
 
-const filtrados = computed(() => {
+// Entradas filtradas por nombre / cultivo / variedad / familia, agrupadas por
+// cultivo manteniendo el orden del catálogo.
+const grupos = computed(() => {
   const q = search.value.trim().toLowerCase()
-  if (!q) return CROPS_LIBRARY
-  return CROPS_LIBRARY.filter(
-    (c) => c.nombre.toLowerCase().includes(q) || c.familia.toLowerCase().includes(q),
-  )
+  const lista = !q
+    ? CROPS_LIBRARY
+    : CROPS_LIBRARY.filter((c) =>
+        [c.nombre, c.cultivo, c.variedad, c.familia].some((v) =>
+          (v || '').toLowerCase().includes(q),
+        ),
+      )
+  const map = new Map()
+  for (const c of lista) {
+    if (!map.has(c.cultivo)) map.set(c.cultivo, [])
+    map.get(c.cultivo).push(c)
+  }
+  return [...map.entries()].map(([cultivo, items]) => ({ cultivo, items }))
 })
 
 function abrir(c) {
@@ -112,6 +145,7 @@ async function anadir() {
       tempIdeal: c.tempIdeal,
       plagas: c.plagas,
       tiempoCosecha: c.tiempoCosecha,
+      foto: c.foto,
     })
     const nombreHuerto = huertos.value.find((h) => h.id === destino.value)?.nombre
     addMsg.value = `"${c.nombre}" añadido a ${nombreHuerto}.`
@@ -152,10 +186,27 @@ onMounted(async () => {
   margin-bottom: 24px;
   font-size: 0.95rem;
 }
+.group {
+  margin-bottom: 30px;
+}
+.group-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 14px;
+  font-size: 1.25rem;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-border-soft);
+}
+.group-count {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-text-soft);
+}
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 18px;
 }
 .crop-card {
   text-align: left;
@@ -173,18 +224,23 @@ onMounted(async () => {
   box-shadow: var(--shadow-hover);
 }
 .thumb {
-  height: 96px;
+  height: 120px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--color-primary-soft);
   color: var(--color-primary);
 }
+.thumb.photo {
+  background-size: cover;
+  background-position: center;
+}
 .body {
   padding: 14px 16px;
 }
 .body h3 {
   margin: 0;
+  font-size: 1rem;
 }
 .fam {
   font-size: 0.8rem;
@@ -200,7 +256,7 @@ onMounted(async () => {
 }
 /* Ficha modal */
 .ficha-head {
-  height: 110px;
+  height: 150px;
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
@@ -208,6 +264,10 @@ onMounted(async () => {
   margin-bottom: 16px;
   background: var(--color-primary-soft);
   color: var(--color-primary);
+}
+.ficha-head.photo {
+  background-size: cover;
+  background-position: center;
 }
 .ficha {
   margin: 0;
