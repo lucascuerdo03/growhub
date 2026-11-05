@@ -107,17 +107,19 @@ async function add() {
   error.value = ''
   try {
     const crop = cultivos.value.find((c) => c.id === cropId.value)
-    await createTarea(orchardId, {
+    const datos = {
       titulo: titulo.value.trim(),
       descripcion: descripcion.value.trim(),
       cropId: cropId.value,
       cropNombre: crop?.nombre || '',
       frecuenciaRiego: frecuenciaRiego.value,
-    })
+    }
+    const id = await createTarea(orchardId, datos)
+    // Aparece al instante, sin recargar la lista.
+    tareas.value.unshift({ id, completada: false, ...datos })
     titulo.value = ''
     descripcion.value = ''
     cropId.value = null
-    await load()
   } catch (e) {
     error.value = 'No se pudo crear la tarea.'
     console.error(e)

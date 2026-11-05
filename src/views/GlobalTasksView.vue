@@ -90,13 +90,23 @@ async function add() {
   if (!titulo.value.trim() || !orchardId.value) return
   saving.value = true
   error.value = ''
+  const destino = orchardId.value
+  const datos = {
+    titulo: titulo.value.trim(),
+    frecuenciaRiego: frecuenciaRiego.value,
+  }
   try {
-    await createTarea(orchardId.value, {
-      titulo: titulo.value.trim(),
-      frecuenciaRiego: frecuenciaRiego.value,
+    const id = await createTarea(destino, datos)
+    // Aparece al instante en la lista, sin recargar la página.
+    const h = huertos.value.find((x) => x.id === destino)
+    tareas.value.unshift({
+      id,
+      completada: false,
+      orchardId: destino,
+      orchardNombre: h?.nombre || '',
+      ...datos,
     })
     titulo.value = ''
-    await load()
   } catch (e) {
     error.value = 'No se pudo crear la tarea.'
     console.error(e)

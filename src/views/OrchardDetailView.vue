@@ -235,16 +235,18 @@ async function load() {
 
 async function addCrop() {
   if (!cropNombre.value.trim()) return
+  const datos = {
+    nombre: cropNombre.value.trim(),
+    especie: cropEspecie.value.trim(),
+    foto: cropFoto.value.trim(),
+  }
   try {
-    await createCultivo(orchardId, {
-      nombre: cropNombre.value.trim(),
-      especie: cropEspecie.value.trim(),
-      foto: cropFoto.value.trim(),
-    })
+    const id = await createCultivo(orchardId, datos)
+    // Se muestra al instante, sin recargar la lista.
+    cultivos.value.unshift({ id, ...datos })
     cropNombre.value = ''
     cropEspecie.value = ''
     cropFoto.value = ''
-    cultivos.value = await getCultivos(orchardId)
   } catch (e) {
     error.value = 'No se pudo crear el cultivo.'
     console.error(e)
@@ -264,13 +266,15 @@ async function removeCrop(id) {
 
 async function addTask() {
   if (!taskTitulo.value.trim()) return
+  const datos = {
+    titulo: taskTitulo.value.trim(),
+    frecuenciaRiego: taskFrec.value,
+  }
   try {
-    await createTarea(orchardId, {
-      titulo: taskTitulo.value.trim(),
-      frecuenciaRiego: taskFrec.value,
-    })
+    const id = await createTarea(orchardId, datos)
+    // Aparece al instante en "Pendientes", sin recargar.
+    tareas.value.unshift({ id, completada: false, ...datos })
     taskTitulo.value = ''
-    tareas.value = await getTareas(orchardId)
   } catch (e) {
     error.value = 'No se pudo crear la tarea.'
     console.error(e)
