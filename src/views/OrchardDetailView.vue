@@ -283,20 +283,33 @@ async function addTask() {
 
 async function toggleTask(t) {
   const nuevo = !t.completada
-  t.completada = nuevo
+  t.completada = nuevo // optimista
   try {
     await updateTarea(orchardId, t.id, { completada: nuevo })
-    // Al completar una tarea se publica automáticamente en el cuaderno.
-    if (nuevo) {
-      await createPost(orchardId, {
+  } catch (e) {
+    t.completada = !nuevo // revertir solo si falla el guardado de la tarea
+    error.value = 'No se pudo actualizar la tarea.'
+    console.error(e)
+    return
+  }
+  // Al completar una tarea se publica automáticamente en el cuaderno. Si esto
+  // falla (p. ej. reglas de posts no publicadas) NO revertimos la tarea: ya
+  // quedó completada correctamente.
+  if (nuevo) {
+    try {
+      const { id } = await createPost(orchardId, {
         texto: `He completado la tarea: ${t.titulo}`,
         ...autorInfo(),
       })
-      posts.value = await getPosts(orchardId)
+      posts.value.unshift({
+        id,
+        texto: `He completado la tarea: ${t.titulo}`,
+        createdAt: { toDate: () => new Date() },
+        ...autorInfo(),
+      })
+    } catch (e) {
+      console.warn('No se pudo autopublicar en el cuaderno:', e)
     }
-  } catch (e) {
-    t.completada = !nuevo
-    console.error(e)
   }
 }
 
@@ -313,17 +326,20 @@ async function removeTask(t) {
 async function publicar() {
   if (!nuevoPost.value.trim()) return
   publicando.value = true
+  const datos = {
+    texto: nuevoPost.value.trim(),
+    foto: postFoto.value.trim(),
+    ...autorInfo(),
+  }
   try {
-    await createPost(orchardId, {
-      texto: nuevoPost.value.trim(),
-      foto: postFoto.value.trim(),
-      ...autorInfo(),
-    })
+    const { id } = await createPost(orchardId, datos)
+    // La entrada aparece al instante en el feed.
+    posts.value.unshift({ id, createdAt: { toDate: () => new Date() }, ...datos })
     nuevoPost.value = ''
     postFoto.value = ''
-    posts.value = await getPosts(orchardId)
   } catch (e) {
-    error.value = 'No se pudo publicar.'
+    error.value =
+      'No se pudo publicar. Si es la primera vez, revisa que las reglas de Firestore incluyan "posts".'
     console.error(e)
   } finally {
     publicando.value = false

@@ -56,13 +56,17 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { useAuth } from '../composables/useAuth'
 import {
   getCultivos,
   getTareas,
   createTarea,
   updateTarea,
   deleteTarea,
+  createPost,
 } from '../services/firestoreService'
+
+const { user } = useAuth()
 
 const FRECUENCIAS = [
   'Sin riego',
@@ -134,9 +138,23 @@ async function toggle(t) {
   try {
     await updateTarea(orchardId, t.id, { completada: nuevo })
   } catch (e) {
-    t.completada = !nuevo // revertir
+    t.completada = !nuevo // revertir solo si falla el guardado
     error.value = 'No se pudo actualizar la tarea.'
     console.error(e)
+    return
+  }
+  // Al completar, se autopublica en el cuaderno del huerto (no es crítico).
+  if (nuevo) {
+    try {
+      await createPost(orchardId, {
+        texto: `He completado la tarea: ${t.titulo}`,
+        autorId: user.value.uid,
+        autorNombre: user.value.displayName || user.value.email,
+        autorFoto: user.value.photoURL || '',
+      })
+    } catch (e) {
+      console.warn('No se pudo autopublicar en el cuaderno:', e)
+    }
   }
 }
 

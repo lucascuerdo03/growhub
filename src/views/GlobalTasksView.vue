@@ -57,6 +57,7 @@ import {
   createTarea,
   updateTarea,
   deleteTarea,
+  createPost,
 } from '../services/firestoreService'
 
 const FRECUENCIAS = ['Sin riego', 'Diario', 'Cada 2-3 días', 'Semanal', 'Solo en sequía']
@@ -124,6 +125,20 @@ async function toggle(t) {
     t.completada = !nuevo
     error.value = 'No se pudo actualizar la tarea.'
     console.error(e)
+    return
+  }
+  // Al completar, se autopublica en el cuaderno del huerto (no es crítico).
+  if (nuevo) {
+    try {
+      await createPost(t.orchardId, {
+        texto: `He completado la tarea: ${t.titulo}`,
+        autorId: user.value.uid,
+        autorNombre: user.value.displayName || user.value.email,
+        autorFoto: user.value.photoURL || '',
+      })
+    } catch (e) {
+      console.warn('No se pudo autopublicar en el cuaderno:', e)
+    }
   }
 }
 
