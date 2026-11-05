@@ -194,6 +194,7 @@ import { Sprout, Radio, ListChecks, BookOpen } from 'lucide-vue-next'
 .cta-band h2 {
   margin: 0 0 8px;
   font-size: 1.8rem;
+  color: #fff;
 }
 .cta-band p {
   margin: 0 0 22px;
