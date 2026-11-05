@@ -186,7 +186,7 @@ import { Sprout, Radio, ListChecks, BookOpen } from 'lucide-vue-next'
   font-size: 0.92rem;
 }
 .cta-band {
-  background: #0f2740;
+  background: var(--color-primary);
   color: #fff;
   text-align: center;
   padding: 56px 28px;
@@ -197,11 +197,14 @@ import { Sprout, Radio, ListChecks, BookOpen } from 'lucide-vue-next'
 }
 .cta-band p {
   margin: 0 0 22px;
-  color: #e0f2fe;
+  color: #eaf6ff;
 }
 .cta-band .btn-solid {
   background: #fff;
   color: var(--color-primary-dark);
+}
+.cta-band .btn-solid:hover {
+  background: #eaf6ff;
 }
 .foot {
   text-align: center;
