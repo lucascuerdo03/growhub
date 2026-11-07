@@ -42,17 +42,17 @@ function dibujar(img, ladoMax) {
 
 // Devuelve un data URL JPEG de como máximo BYTES_MAX. Baja primero la calidad
 // y, si no basta, también el tamaño.
-export async function comprimirImagen(file) {
+export async function comprimirImagen(file, { ladoMax = LADO_MAX, bytesMax = BYTES_MAX } = {}) {
   if (!file.type.startsWith('image/')) {
     throw new Error('El archivo seleccionado no es una imagen.')
   }
   const img = await cargarImagen(file)
-  let lado = LADO_MAX
-  while (lado >= 320) {
+  let lado = ladoMax
+  while (lado >= Math.min(320, ladoMax)) {
     const canvas = dibujar(img, lado)
     for (let calidad = CALIDAD_INICIAL; calidad >= CALIDAD_MIN; calidad -= 0.1) {
       const dataUrl = canvas.toDataURL('image/jpeg', calidad)
-      if (bytesDeDataUrl(dataUrl) <= BYTES_MAX) return dataUrl
+      if (bytesDeDataUrl(dataUrl) <= bytesMax) return dataUrl
     }
     lado = Math.round(lado * 0.75)
   }

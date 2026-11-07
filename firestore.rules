@@ -53,6 +53,16 @@ service cloud.firestore {
         && request.resource.data.email == miEmail();
     }
 
+    // Foto de perfil, aparte del perfil para no descargarla al leer el nombre.
+    // Máx. 200 000 caracteres: se reduce a 320 px antes de subirla.
+    match /userPhotos/{uid} {
+      allow get: if autenticado();
+      allow create, update: if autenticado() && request.auth.uid == uid
+        && request.resource.data.data is string
+        && request.resource.data.data.size() <= 200000;
+      allow delete: if autenticado() && request.auth.uid == uid;
+    }
+
     // El id es "{orchardId}_{email}": una invitación por persona y huerto, y las
     // reglas del huerto pueden localizarla al aceptar.
     match /invitations/{invitationId} {
@@ -96,6 +106,19 @@ service cloud.firestore {
               || (miembrosCoherentes(n)
                   && request.auth.uid in n.memberIds
                   && n.members[request.auth.uid].role == 'propietario'));
+      }
+      // Ceder el huerto a otro miembro: quien lo cede pasa a ser administrador.
+      function propietarioCede() {
+        let v = resource.data;
+        let n = request.resource.data;
+        return v.ownerId == request.auth.uid
+          && n.ownerId != request.auth.uid
+          && n.ownerId in v.memberIds
+          && n.diff(v).affectedKeys().hasOnly(['ownerId', 'members'])
+          && n.members.diff(v.members).affectedKeys().hasOnly([request.auth.uid, n.ownerId])
+          && n.members[n.ownerId].role == 'propietario'
+          && n.members[request.auth.uid].role == 'administrador'
+          && n.members[request.auth.uid].permissions == permisosRol('administrador');
       }
       // Un administrador gestiona todo, salvo la entrada del propietario.
       function administradorActualiza() {
@@ -147,7 +170,7 @@ service cloud.firestore {
         && request.resource.data.members.size() == 1
         && request.resource.data.members[request.auth.uid].role == 'propietario';
       allow update: if autenticado()
-        && (propietarioActualiza() || administradorActualiza()
+        && (propietarioActualiza() || propietarioCede() || administradorActualiza()
             || miembroAbandona() || invitadoAcepta());
       allow delete: if autenticado() && resource.data.ownerId == request.auth.uid;
 

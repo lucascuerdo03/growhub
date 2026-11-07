@@ -41,9 +41,8 @@ export const resetPassword = (email) => sendPasswordResetEmail(auth, email)
 
 export const logoutUser = () => signOut(auth)
 
-// Actualiza el perfil del usuario actual (nombre y/o URL de foto).
-export const updateUserProfile = ({ displayName, photoURL }) =>
-  updateProfile(auth.currentUser, { displayName, photoURL })
+// Actualiza el perfil del usuario actual.
+export const updateUserProfile = (datos) => updateProfile(auth.currentUser, datos)
 
 // Traduce los códigos de error de Firebase Auth a mensajes legibles en español.
 export const authErrorMessage = (code) => {

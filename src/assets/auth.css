@@ -23,6 +23,16 @@
   color: #6b7280;
   margin: 0 0 24px;
 }
+.auth-card .notice {
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-primary-border);
+  border-radius: 8px;
+  color: var(--color-primary-dark);
+  font-size: 0.86rem;
+  text-align: left;
+  padding: 10px 12px;
+  margin: -8px 0 16px;
+}
 .auth-card form {
   display: flex;
   flex-direction: column;

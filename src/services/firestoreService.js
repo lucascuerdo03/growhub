@@ -59,6 +59,20 @@ export const asegurarUsuario = async ({ uid, email, displayName }) => {
   }
 }
 
+export const fuenteFotoUsuario = (uid) => ({
+  clave: `userPhoto:${uid}`,
+  escuchar: (alRecibir, alFallar) =>
+    onSnapshot(
+      doc(db, 'userPhotos', uid),
+      (snap) => alRecibir(snap.exists() ? [snap.data()] : []),
+      alFallar,
+    ),
+})
+
+export const guardarFotoUsuario = (uid, data) => setDoc(doc(db, 'userPhotos', uid), { data })
+
+export const borrarFotoUsuario = (uid) => deleteDoc(doc(db, 'userPhotos', uid))
+
 /* ----------------------------- Huertos ----------------------------- */
 
 const porFecha = (a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
@@ -168,6 +182,14 @@ export const quitarMiembro = (orchardId, uid) =>
   updateDoc(doc(db, 'orchards', orchardId), {
     memberIds: arrayRemove(uid),
     [`members.${uid}`]: deleteField(),
+  })
+
+// El propietario cede el huerto y pasa a ser administrador; después ya puede irse.
+export const cederPropiedad = (orchardId, nuevoUid, miUid) =>
+  updateDoc(doc(db, 'orchards', orchardId), {
+    ownerId: nuevoUid,
+    [`members.${nuevoUid}`]: miembroConRol('propietario'),
+    [`members.${miUid}`]: miembroConRol('administrador'),
   })
 
 /* --------------------------- Invitaciones -------------------------- */

@@ -118,7 +118,7 @@
       <h2 class="section-title">Cuaderno de campo</h2>
 
       <form v-if="permisos.publishPosts" class="composer" @submit.prevent="publicar">
-        <span class="avatar">{{ inicial }}</span>
+        <UserAvatar :uid="user?.uid" :nombre="user?.displayName || user?.email" :url="user?.photoURL || ''" :size="40" />
         <div class="composer-body">
           <textarea v-model="nuevoPost" rows="2" placeholder="¿Qué está pasando en el huerto?"></textarea>
           <ImageUpload v-model="postFoto" class="post-foto-input" />
@@ -139,7 +139,7 @@
 
       <article v-for="p in posts" :key="p.id" class="post">
         <header class="post-head">
-          <span class="avatar sm">{{ (p.autorNombre || '?').charAt(0).toUpperCase() }}</span>
+          <UserAvatar :uid="p.autorId" :nombre="p.autorNombre" :size="36" />
           <div>
             <strong>{{ p.autorNombre || 'Usuario' }}</strong>
             <span class="post-time">{{ fecha(p.createdAt) }}</span>
@@ -162,6 +162,7 @@ import { useHuerto } from '../composables/useHuertos'
 import { useVivo } from '../composables/useVivo'
 import ImageUpload from '../components/ImageUpload.vue'
 import StoredImage from '../components/StoredImage.vue'
+import UserAvatar from '../components/UserAvatar.vue'
 import { nombreRol, mensajeError } from '../utils/permissions'
 import {
   fuenteCultivos,
@@ -209,9 +210,6 @@ const publicando = ref(false)
 const puedeBorrarPost = (p) =>
   permisos.value.admin || (permisos.value.publishPosts && p.autorId === user.value?.uid)
 
-const inicial = computed(() =>
-  (user.value?.displayName || user.value?.email || '?').charAt(0).toUpperCase(),
-)
 const cultivosFiltrados = computed(() => {
   const q = search.value.trim().toLowerCase()
   if (!q) return cultivos.value

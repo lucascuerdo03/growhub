@@ -11,6 +11,7 @@ import BibliotecaView from '../views/BibliotecaView.vue'
 import VerifyEmailView from '../views/VerifyEmailView.vue'
 import MainLayout from '../layouts/MainLayout.vue'
 import { waitForAuth } from '../composables/useAuth'
+import { guardarDestino, tomarDestino } from '../utils/destino'
 
 // Vistas pesadas (usan Leaflet / Chart.js): se cargan bajo demanda
 // para aligerar la carga inicial de la app.
@@ -51,6 +52,9 @@ const routes = [
       { path: 'settings', component: SettingsView },
       { path: 'profile', component: ProfileView },
       { path: 'invitations', component: InvitationsView },
+      // Enlace que se comparte: lleva el huerto, no el email, y por sí solo no da
+      // acceso: la invitación tiene que ser para el email con el que se entra.
+      { path: 'invitacion/:orchardId', component: InvitationsView },
       { path: 'orchard/:id', component: OrchardDetailView },
       { path: 'orchard/:id/crop/:cropId', component: CropDetailView },
       { path: 'orchard/:id/settings', component: OrchardSettingsView },
@@ -74,19 +78,21 @@ router.beforeEach(async (to) => {
   // Pantalla de verificación: requiere sesión; si ya está verificado, al panel.
   if (to.path === '/verify-email') {
     if (!user) return '/login'
-    if (verificado) return '/dashboard'
+    if (verificado) return tomarDestino()
     return true
   }
 
   // Rutas protegidas: hace falta sesión y email verificado.
   if (to.meta.requiresAuth) {
+    // Sin sesión lista, el enlace de invitación se retoma después de entrar.
+    if (!user || !verificado) guardarDestino(to.path)
     if (!user) return '/login'
     if (!verificado) return '/verify-email'
     return true
   }
 
   // Páginas de invitado (login/registro/recuperar): solo si no hay sesión válida.
-  if (to.meta.requiresGuest && user && verificado) return '/dashboard'
+  if (to.meta.requiresGuest && user && verificado) return tomarDestino()
   if (to.path === '/' && user && verificado) return '/dashboard'
   return true
 })

@@ -32,6 +32,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth, reloadUser } from '../composables/useAuth'
 import { resendVerification, logoutUser } from '../services/authService'
+import { tomarDestino } from '../utils/destino'
 import '../assets/auth.css'
 
 const router = useRouter()
@@ -48,7 +49,7 @@ async function comprobar() {
   try {
     const u = await reloadUser()
     if (u?.emailVerified) {
-      router.push('/dashboard')
+      router.push(tomarDestino())
     } else {
       error.value = 'Tu correo aún no está verificado. Revisa tu bandeja de entrada.'
     }

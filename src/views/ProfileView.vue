@@ -3,10 +3,7 @@
     <h1>Mi perfil</h1>
 
     <div class="profile-card">
-      <div class="avatar">
-        <img v-if="photoURL" :src="photoURL" alt="Foto de perfil" @error="imgError = true" />
-        <span v-else class="placeholder">{{ initial }}</span>
-      </div>
+      <UserAvatar :uid="user?.uid" :nombre="displayName || user?.email" :url="user?.photoURL || ''" :size="96" />
 
       <form class="form" @submit.prevent="save">
         <label>Nombre</label>
@@ -15,14 +12,13 @@
         <label>Email</label>
         <input :value="user?.email" disabled />
 
-        <label>Foto de perfil (URL)</label>
-        <input v-model="photoURL" placeholder="https://…/foto.jpg" />
-        <p v-if="imgError" class="hint warn">No se pudo cargar la imagen de esa URL.</p>
+        <label>Foto de perfil</label>
+        <ImageUpload v-model="foto" v-model:removed="fotoQuitada" :url="fotoActual" :opciones="OPCIONES_FOTO" />
 
         <p v-if="error" class="error">{{ error }}</p>
         <p v-if="saved" class="success">Tus datos se han guardado correctamente.</p>
 
-        <button type="submit" :disabled="saving">
+        <button type="submit" class="save" :disabled="saving">
           {{ saving ? 'Guardando…' : 'Guardar cambios' }}
         </button>
       </form>
@@ -31,38 +27,52 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { useAuth, refreshUser } from '../composables/useAuth'
+import { useVivo } from '../composables/useVivo'
 import { updateUserProfile } from '../services/authService'
-import { asegurarUsuario } from '../services/firestoreService'
+import {
+  asegurarUsuario,
+  fuenteFotoUsuario,
+  guardarFotoUsuario,
+  borrarFotoUsuario,
+} from '../services/firestoreService'
+import ImageUpload from '../components/ImageUpload.vue'
+import UserAvatar from '../components/UserAvatar.vue'
+
+// Pequeña: se descarga en cada lista de miembros y en cada publicación.
+const OPCIONES_FOTO = { ladoMax: 320, bytesMax: 140 * 1024 }
 
 const { user } = useAuth()
+const { datos: fotoGuardada } = useVivo(() =>
+  user.value ? fuenteFotoUsuario(user.value.uid) : null,
+)
+const fotoActual = computed(() => fotoGuardada.value[0]?.data || user.value?.photoURL || '')
 
 const displayName = ref(user.value?.displayName || '')
-const photoURL = ref(user.value?.photoURL || '')
+const foto = ref('')
+const fotoQuitada = ref(false)
 const saving = ref(false)
 const saved = ref(false)
 const error = ref('')
-const imgError = ref(false)
-
-const initial = computed(() =>
-  (displayName.value || user.value?.email || '?').charAt(0).toUpperCase(),
-)
-
-watch(photoURL, () => (imgError.value = false))
 
 async function save() {
   saving.value = true
   saved.value = false
   error.value = ''
   try {
+    if (foto.value) await guardarFotoUsuario(user.value.uid, foto.value)
+    else if (fotoQuitada.value && fotoGuardada.value.length) await borrarFotoUsuario(user.value.uid)
     await updateUserProfile({
       displayName: displayName.value.trim(),
-      photoURL: photoURL.value.trim(),
+      // La foto por enlace de las cuentas antiguas deja de usarse al cambiarla.
+      ...(user.value.photoURL && (foto.value || fotoQuitada.value) ? { photoURL: '' } : {}),
     })
     refreshUser()
     // El nombre también se muestra a los demás miembros de tus huertos.
     await asegurarUsuario(user.value).catch((e) => console.warn(e))
+    foto.value = ''
+    fotoQuitada.value = false
     saved.value = true
   } catch (e) {
     error.value = 'No se pudieron guardar los cambios.'
@@ -86,27 +96,6 @@ h1 {
   display: flex;
   gap: 28px;
   flex-wrap: wrap;
-}
-.avatar {
-  width: 96px;
-  height: 96px;
-  border-radius: 50%;
-  overflow: hidden;
-  background: #0284c7;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.placeholder {
-  color: white;
-  font-size: 2.4rem;
-  font-weight: 700;
 }
 .form {
   flex: 1;
@@ -137,7 +126,7 @@ input:disabled {
 .warn {
   color: #b45309;
 }
-button {
+.save {
   margin-top: 18px;
   padding: 11px;
   background: #0284c7;
@@ -147,7 +136,7 @@ button {
   font-weight: 600;
   cursor: pointer;
 }
-button:disabled {
+.save:disabled {
   opacity: 0.6;
   cursor: default;
 }

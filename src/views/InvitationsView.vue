@@ -5,9 +5,20 @@
       <p class="sub">Huertos que otras personas quieren compartir contigo.</p>
     </header>
 
+    <template v-if="orchardId && !cargando && !invitaciones.length">
+      <p v-if="huerto" class="muted">
+        Ya eres miembro de este huerto.
+        <router-link :to="`/orchard/${orchardId}`">Abrir {{ huerto.nombre }}</router-link>
+      </p>
+      <p v-else-if="listo" class="muted">
+        No hay ninguna invitación pendiente para {{ user.email }} en este huerto. Comprueba que has
+        entrado con el email al que te invitaron, o pide que te envíen una invitación nueva.
+      </p>
+    </template>
+
     <p v-if="error" class="error">{{ error }}</p>
     <p v-if="errorCarga" class="error">No se pudieron cargar las invitaciones.</p>
-    <p v-else-if="!invitaciones.length" class="muted">No tienes invitaciones pendientes.</p>
+    <p v-else-if="!orchardId && !cargando && !invitaciones.length" class="muted">No tienes invitaciones pendientes.</p>
 
     <ul class="list">
       <li v-for="inv in invitaciones" :key="inv.id" class="card">
@@ -27,16 +38,20 @@
 
 <script setup>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { useInvitaciones } from '../composables/useInvitaciones'
-import { esperarHuerto } from '../composables/useHuertos'
+import { esperarHuerto, useHuerto } from '../composables/useHuertos'
 import { aceptarInvitacion, rechazarInvitacion } from '../services/firestoreService'
 import { nombreRol } from '../utils/permissions'
 
 const router = useRouter()
+const route = useRoute()
+// Desde un enlace de invitación solo se muestra la de ese huerto.
+const orchardId = route.params.orchardId || null
 const { user } = useAuth()
-const { invitaciones, error: errorCarga } = useInvitaciones()
+const { invitaciones, cargando, error: errorCarga } = useInvitaciones(orchardId)
+const { huerto, listo } = useHuerto(orchardId)
 const ocupada = ref('')
 const error = ref('')
 

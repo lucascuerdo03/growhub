@@ -20,8 +20,7 @@
 
         <div class="nav-right">
           <router-link to="/profile" class="nav-avatar" title="Mi perfil">
-            <img v-if="user?.photoURL" :src="user.photoURL" alt="" />
-            <span v-else>{{ initial }}</span>
+            <UserAvatar :uid="user?.uid" :nombre="nombreVisible" :url="user?.photoURL || ''" :size="36" />
           </router-link>
           <button class="logout" @click="logout" title="Cerrar sesión">
             <LogOut :size="18" />
@@ -45,6 +44,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { LogOut, Menu } from 'lucide-vue-next'
+import UserAvatar from '../components/UserAvatar.vue'
 import { logoutUser } from '../services/authService'
 import { useAuth } from '../composables/useAuth'
 import { useInvitaciones } from '../composables/useInvitaciones'
@@ -65,9 +65,7 @@ onMounted(() => {
   asegurarUsuario(user.value).catch((e) => console.warn('No se pudo guardar el perfil:', e))
 })
 
-const initial = computed(() =>
-  (user.value?.displayName || user.value?.email || '?').charAt(0).toUpperCase(),
-)
+const nombreVisible = computed(() => user.value?.displayName || user.value?.email || '')
 
 async function logout() {
   await logoutUser()
@@ -151,24 +149,9 @@ async function logout() {
   gap: 10px;
 }
 .nav-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--color-primary);
-  color: #fff;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  font-size: 0.9rem;
-  overflow: hidden;
+  border-radius: 50%;
   text-decoration: none;
-  flex-shrink: 0;
-}
-.nav-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 .logout {
   display: flex;

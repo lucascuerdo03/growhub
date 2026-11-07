@@ -337,6 +337,61 @@ await permitido('con una invitación nueva sí puede volver', async () => {
   await aceptar(b, id, 'lector')
 })
 
+console.log('\n--- Ceder la propiedad ---')
+const cedido = await crearHuerto(a, 'Para ceder')
+const ceder = (de, a_uid) =>
+  updateDoc(huertoRef(de, cedido), {
+    ownerId: a_uid,
+    [`members.${a_uid}`]: miembroConRol('propietario'),
+    [`members.${de.uid}`]: miembroConRol('administrador'),
+  })
+await permitido('entra B como colaborador', async () => {
+  await invitacion(a, cedido, b.email, 'colaborador')
+  await aceptar(b, cedido, 'colaborador')
+})
+await rechazado('un colaborador no puede quedarse el huerto', () => ceder(b, b.uid))
+await rechazado('no se puede ceder a quien no es miembro', () => ceder(a, c.uid))
+await rechazado('al ceder hay que pasar a administrador, no quedarse otro rol', () =>
+  updateDoc(huertoRef(a, cedido), {
+    ownerId: b.uid,
+    [`members.${b.uid}`]: miembroConRol('propietario'),
+    [`members.${a.uid}`]: miembroConRol('lector'),
+  }))
+await rechazado('al ceder no se pueden cambiar otros campos', () =>
+  updateDoc(huertoRef(a, cedido), {
+    nombre: 'Otro',
+    ownerId: b.uid,
+    [`members.${b.uid}`]: miembroConRol('propietario'),
+    [`members.${a.uid}`]: miembroConRol('administrador'),
+  }))
+await rechazado('el propietario aún no puede abandonar', () =>
+  updateDoc(huertoRef(a, cedido), { memberIds: arrayRemove(a.uid), [`members.${a.uid}`]: deleteField() }))
+await permitido('el propietario cede el huerto a B', () => ceder(a, b.uid))
+await rechazado('el antiguo propietario ya no puede borrarlo', () => deleteDoc(huertoRef(a, cedido)))
+await rechazado('ni recuperarlo por su cuenta', () => ceder(a, a.uid))
+await rechazado('ni tocar la entrada del nuevo propietario', () =>
+  updateDoc(huertoRef(a, cedido), { [`members.${b.uid}`]: miembroConRol('lector') }))
+await permitido('como administrador sigue pudiendo editarlo', () =>
+  updateDoc(huertoRef(a, cedido), { nombre: 'Editado por A' }))
+await permitido('y ahora sí puede abandonarlo', () =>
+  updateDoc(huertoRef(a, cedido), { memberIds: arrayRemove(a.uid), [`members.${a.uid}`]: deleteField() }))
+await rechazado('tras abandonar ya no lo lee', () => getDoc(huertoRef(a, cedido)))
+await permitido('el nuevo propietario lo ve con la consulta por ownerId', async () => {
+  const snap = await getDocs(query(collection(b.db, 'orchards'), where('ownerId', '==', b.uid)))
+  if (!snap.docs.some((d) => d.id === cedido)) throw new Error('no aparece')
+})
+await permitido('el nuevo propietario lo borra', () => deleteDoc(huertoRef(b, cedido)))
+
+console.log('\n--- Foto de perfil ---')
+await permitido('subir mi foto', () => setDoc(doc(a.db, 'userPhotos', a.uid), { data: 'data:image/jpeg;base64,AA' }))
+await rechazado('subir la foto de otro', () => setDoc(doc(b.db, 'userPhotos', a.uid), { data: 'x' }))
+await rechazado('una foto demasiado grande', () =>
+  setDoc(doc(a.db, 'userPhotos', a.uid), { data: 'x'.repeat(200001) }))
+await permitido('otro usuario la ve', () => getDoc(doc(b.db, 'userPhotos', a.uid)))
+await rechazado('listar las fotos de todos', () => getDocs(collection(b.db, 'userPhotos')))
+await rechazado('borrar la foto de otro', () => deleteDoc(doc(b.db, 'userPhotos', a.uid)))
+await permitido('borrar la mía', () => deleteDoc(doc(a.db, 'userPhotos', a.uid)))
+
 console.log('\n--- Rechazar, cancelar y borrar ---')
 const c2 = await crearHuerto(a, 'Otro')
 await permitido('invitar para rechazar', () => invitacion(a, c2, c.email, 'lector'))

@@ -37,6 +37,8 @@ const props = defineProps({
   orchardId: { type: String, default: '' },
   fotoId: { type: String, default: '' },
   url: { type: String, default: '' },
+  // Para imágenes pequeñas, como la foto de perfil.
+  opciones: { type: Object, default: () => ({}) },
 })
 const emit = defineEmits(['update:modelValue', 'update:removed'])
 
@@ -56,7 +58,7 @@ async function onFile(e) {
   procesando.value = true
   error.value = ''
   try {
-    emit('update:modelValue', await comprimirImagen(file))
+    emit('update:modelValue', await comprimirImagen(file, props.opciones))
   } catch (err) {
     error.value = err.message
   } finally {

@@ -13,7 +13,7 @@
         <ul class="members">
           <li v-for="m in miembros" :key="m.uid" class="member">
             <div class="row">
-              <span class="avatar">{{ (m.nombre || '?').charAt(0).toUpperCase() }}</span>
+              <UserAvatar :uid="m.uid" :nombre="m.nombre" :size="38" />
               <div class="who">
                 <strong>{{ m.nombre }}<span v-if="m.uid === user.uid" class="you"> (tú)</span></strong>
                 <span class="muted small">{{ m.email }}</span>
@@ -32,6 +32,9 @@
 
               <button v-if="editable(m)" class="link-btn" @click="abierto = abierto === m.uid ? '' : m.uid">
                 Permisos
+              </button>
+              <button v-if="permisos.propietario && m.uid !== user.uid" class="link-btn" @click="ceder(m)">
+                Ceder propiedad
               </button>
               <button
                 v-if="editable(m) && m.uid !== user.uid"
@@ -60,7 +63,7 @@
         <h2>Invitar por email</h2>
         <p class="muted small">
           La persona verá la invitación al entrar en GrowHub con ese email, aunque aún no tenga
-          cuenta. No se le envía ningún correo: avísale de que la tiene pendiente.
+          cuenta. Después puedes copiarle el enlace o enviárselo desde tu correo.
         </p>
         <form class="invite" @submit.prevent="invitar">
           <input v-model="email" type="email" placeholder="persona@email.com" aria-label="Email de la persona invitada" />
@@ -79,6 +82,8 @@
           <li v-for="inv in pendientes" :key="inv.id">
             <span>{{ inv.email }}</span>
             <span class="role">{{ nombreRol(inv.role) }}</span>
+            <button class="link-btn" @click="copiarEnlace(inv)">Copiar enlace de invitación</button>
+            <a class="link-btn" :href="enlaceCorreo(inv)">Enviar por correo</a>
             <button
               v-if="permisos.admin || inv.invitedBy === user.uid"
               class="link-btn danger"
@@ -105,11 +110,13 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { useHuerto } from '../composables/useHuertos'
 import { useVivo } from '../composables/useVivo'
+import UserAvatar from '../components/UserAvatar.vue'
 import {
   fuenteInvitacionesHuerto,
   getUsuario,
   setMiembro,
   quitarMiembro,
+  cederPropiedad,
   invitarMiembro,
   cancelarInvitacion,
 } from '../services/firestoreService'
@@ -216,6 +223,47 @@ async function expulsar(m) {
   }
 }
 
+async function ceder(m) {
+  const ok = confirm(
+    `¿Ceder ${huerto.value.nombre} a ${m.nombre}? Pasará a ser propietario y tú quedarás como administrador. No podrás deshacerlo por tu cuenta.`,
+  )
+  if (!ok) return
+  try {
+    await cederPropiedad(orchardId, m.uid, user.value.uid)
+    avisar(`${m.nombre} es ahora el propietario. Ya puedes abandonar el huerto si quieres.`)
+  } catch (e) {
+    fallar(e, 'No se pudo ceder la propiedad.')
+  }
+}
+
+const enlaceDe = () => `${location.origin}/invitacion/${orchardId}`
+
+async function copiarEnlace(inv) {
+  try {
+    await navigator.clipboard.writeText(enlaceDe())
+    avisar(`Enlace copiado. Envíaselo a ${inv.email}.`)
+  } catch {
+    // Sin permiso de portapapeles (o sin https) se muestra para copiarlo a mano.
+    avisar(`Copia este enlace y envíaselo a ${inv.email}: ${enlaceDe()}`)
+  }
+}
+
+// Abre el correo del propio usuario: no hace falta ningún servicio de envío.
+function enlaceCorreo(inv) {
+  const asunto = `Te invito a mi huerto en GrowHub: ${huerto.value.nombre}`
+  const cuerpo = [
+    `Hola:`,
+    ``,
+    `${user.value.displayName || user.value.email} te ha invitado a "${huerto.value.nombre}" en GrowHub como ${nombreRol(inv.role).toLowerCase()}.`,
+    ``,
+    `Abre este enlace para aceptar la invitación:`,
+    enlaceDe(),
+    ``,
+    `Tienes que entrar o registrarte con este email: ${inv.email}.`,
+  ].join('\n')
+  return `mailto:${encodeURIComponent(inv.email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`
+}
+
 async function abandonar() {
   if (!confirm('¿Abandonar este huerto? Necesitarás una nueva invitación para volver.')) return
   try {
@@ -313,18 +361,6 @@ h1 {
   gap: 12px;
   flex-wrap: wrap;
 }
-.avatar {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background: var(--color-primary);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  flex-shrink: 0;
-}
 .who {
   display: flex;
   flex-direction: column;
@@ -352,6 +388,7 @@ h1 {
   font-size: 0.9rem;
 }
 .link-btn {
+  text-decoration: none;
   background: transparent;
   border: none;
   color: var(--color-primary-dark);

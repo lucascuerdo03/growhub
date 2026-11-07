@@ -3,6 +3,9 @@
     <div class="auth-card">
       <h1>GrowHub</h1>
       <p class="subtitle">Inicia sesión para continuar</p>
+      <p v-if="conInvitacion" class="notice">
+        Tienes una invitación a un huerto. Entra o regístrate con el email al que te han invitado.
+      </p>
 
       <form @submit.prevent="login">
         <label>Email</label>
@@ -40,6 +43,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { loginUser, authErrorMessage } from '../services/authService'
 import { reloadUser } from '../composables/useAuth'
+import { hayDestino, tomarDestino } from '../utils/destino'
 import '../assets/auth.css'
 
 const router = useRouter()
@@ -47,6 +51,7 @@ const email = ref('')
 const password = ref('')
 const error = ref('')
 const loading = ref(false)
+const conInvitacion = hayDestino()
 
 async function login() {
   error.value = ''
@@ -55,7 +60,7 @@ async function login() {
     await loginUser(email.value, password.value)
     const u = await reloadUser()
     // Si el email no está verificado, a la pantalla de confirmación.
-    router.push(u?.emailVerified ? '/dashboard' : '/verify-email')
+    router.push(u?.emailVerified ? tomarDestino() : '/verify-email')
   } catch (e) {
     error.value = authErrorMessage(e.code)
   } finally {

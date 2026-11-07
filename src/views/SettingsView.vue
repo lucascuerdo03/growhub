@@ -8,10 +8,7 @@
     <section class="card">
       <h2>Cuenta</h2>
       <div class="account">
-        <span class="avatar">
-          <img v-if="user?.photoURL" :src="user.photoURL" alt="" />
-          <span v-else>{{ initial }}</span>
-        </span>
+        <UserAvatar :uid="user?.uid" :nombre="user?.displayName || user?.email" :url="user?.photoURL || ''" :size="52" />
         <div class="account-info">
           <strong>{{ user?.displayName || 'Usuario' }}</strong>
           <span class="muted">{{ user?.email }}</span>
@@ -49,19 +46,16 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { useAuth } from '../composables/useAuth'
 import { useHuertos } from '../composables/useHuertos'
+import UserAvatar from '../components/UserAvatar.vue'
 import { deleteHuerto } from '../services/firestoreService'
 import { nombreRol, rolEn, permisosEn } from '../utils/permissions'
 
 const { user } = useAuth()
 const { huertos, listos } = useHuertos()
 const error = ref('')
-
-const initial = computed(() =>
-  (user.value?.displayName || user.value?.email || '?').charAt(0).toUpperCase(),
-)
 
 async function remove(h) {
   if (!confirm(`¿Eliminar el huerto "${h.nombre}"? Esta acción no se puede deshacer.`)) return
@@ -102,25 +96,6 @@ async function remove(h) {
   display: flex;
   align-items: center;
   gap: 14px;
-}
-.avatar {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: var(--color-primary);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.4rem;
-  font-weight: 700;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-.avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 .account-info {
   display: flex;

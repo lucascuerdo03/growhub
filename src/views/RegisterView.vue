@@ -3,6 +3,9 @@
     <div class="auth-card">
       <h1>GrowHub</h1>
       <p class="subtitle">Crea tu cuenta</p>
+      <p v-if="conInvitacion" class="notice">
+        Tienes una invitación a un huerto. Regístrate con el email al que te han invitado.
+      </p>
 
       <form @submit.prevent="register">
         <label>Nombre</label>
@@ -60,6 +63,7 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { Eye, EyeOff } from 'lucide-vue-next'
 import { registerUser, authErrorMessage } from '../services/authService'
+import { hayDestino } from '../utils/destino'
 import '../assets/auth.css'
 
 const router = useRouter()
@@ -72,6 +76,7 @@ const showConfirm = ref(false)
 const error = ref('')
 const loading = ref(false)
 const attempted = ref(false)
+const conInvitacion = hayDestino()
 
 // Mostramos el error de coincidencia cuando el usuario ya ha escrito en el
 // campo de confirmación o cuando ha intentado enviar el formulario.
