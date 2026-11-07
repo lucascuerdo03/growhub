@@ -7,7 +7,7 @@
         <img :src="entrada.foto" :alt="entrada.nombre" width="800" height="600" />
         <figcaption>
           <template v-if="!entrada.credito.exacta">Imagen de la especie, no de esta variedad concreta. </template>
-          Foto recortada: {{ entrada.credito.autor || 'autor indicado en la fuente' }} ·
+          Foto adaptada (recorte y brillo): {{ entrada.credito.autor || 'autor indicado en la fuente' }} ·
           <a v-if="entrada.credito.licenciaUrl" :href="entrada.credito.licenciaUrl" target="_blank" rel="noopener">{{ entrada.credito.licencia }}</a>
           <template v-else>{{ entrada.credito.licencia }}</template>
           · <a :href="entrada.credito.pagina" target="_blank" rel="noopener">Wikimedia Commons</a>
