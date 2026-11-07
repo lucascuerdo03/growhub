@@ -1,30 +1,19 @@
-import { ref } from 'vue'
-import { escucharMisInvitaciones } from '../services/firestoreService'
+import { computed, unref } from 'vue'
+import { useVivo } from './useVivo'
+import { fuenteMisInvitaciones } from '../services/firestoreService'
+import { useAuth } from './useAuth'
 
 // Invitaciones pendientes del usuario, compartidas entre la navbar y su sección.
-const invitaciones = ref([])
-const error = ref(false)
-let parar = null
-
-export const dejarDeEscucharInvitaciones = () => {
-  parar?.()
-  parar = null
-  invitaciones.value = []
-}
-
-export const escucharInvitaciones = (email) => {
-  dejarDeEscucharInvitaciones()
-  error.value = false
-  parar = escucharMisInvitaciones(
-    email,
-    (lista) => (invitaciones.value = lista),
-    (e) => {
-      console.warn('No se pudieron cargar las invitaciones:', e)
-      error.value = true
-    },
+export function useInvitaciones(soloHuerto = null) {
+  const { user } = useAuth()
+  const { datos, cargando, error } = useVivo(() =>
+    user.value?.email ? fuenteMisInvitaciones(user.value.email) : null,
   )
-}
-
-export function useInvitaciones() {
-  return { invitaciones, error }
+  return {
+    invitaciones: computed(() =>
+      unref(soloHuerto) ? datos.value.filter((i) => i.orchardId === unref(soloHuerto)) : datos.value,
+    ),
+    cargando,
+    error,
+  }
 }

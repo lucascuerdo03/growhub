@@ -19,7 +19,8 @@
     </form>
 
     <p v-if="error" class="error">{{ error }}</p>
-    <p v-if="loading" class="muted">Cargando…</p>
+    <p v-if="!listo || (huerto && cargandoSensores)" class="muted">Cargando…</p>
+    <p v-else-if="!huerto" class="error">No tienes acceso a este huerto o ya no existe.</p>
     <p v-else-if="!sensores.length" class="muted">No hay sensores en este huerto.</p>
 
     <section v-for="g in grupos" v-else :key="g.id" class="group">
@@ -67,8 +68,8 @@
         </div>
 
         <SensorChart
-          v-if="(readings[s.id] || []).length"
-          :lecturas="readings[s.id]"
+          v-if="lecturasDe(s).length"
+          :lecturas="lecturasDe(s)"
           :label="`${s.nombre} (${s.unidad})`"
           :color="SENSOR_TYPES[s.tipo]?.color"
         />
@@ -84,39 +85,41 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { useAuth } from '../composables/useAuth'
-import { permisosEn, mensajeError } from '../utils/permissions'
+import { useHuerto } from '../composables/useHuertos'
+import { useVivo, useVivoMuchos } from '../composables/useVivo'
+import { mensajeError } from '../utils/permissions'
 import SensorChart from '../components/SensorChart.vue'
 import { SENSOR_TYPES, simularValor } from '../utils/sensorTypes'
 import {
-  getHuerto,
-  getSensores,
+  fuenteSensores,
+  fuenteLecturas,
+  fuenteCultivos,
   createSensor,
   updateSensor,
   deleteSensor,
-  getCultivos,
-  getLecturas,
   addLectura,
 } from '../services/firestoreService'
 
 const route = useRoute()
 const orchardId = route.params.id
-const { user } = useAuth()
+const { huerto, permisos, listo } = useHuerto(orchardId)
 
-const huerto = ref(null)
-const permisos = computed(() => permisosEn(huerto.value, user.value?.uid))
-const sensores = ref([])
-const readings = reactive({}) // sensorId -> [lecturas]
+const siHay = (fuente) => () => (huerto.value ? fuente(orchardId) : null)
+const { datos: sensores, cargando: cargandoSensores } = useVivo(siHay(fuenteSensores))
+const { datos: cultivos } = useVivo(siHay(fuenteCultivos))
+const { porClave } = useVivoMuchos(() =>
+  huerto.value ? sensores.value.map((s) => fuenteLecturas(orchardId, s.id)) : [],
+)
+const lecturasDe = (s) => porClave.value[fuenteLecturas(orchardId, s.id).clave] || []
+
 const busy = reactive({}) // sensorId -> bool
-const cultivos = ref([])
 const nombre = ref('')
 const tipo = ref('temperatura')
 const cropId = ref('')
 const deviceId = ref('')
 const edicion = ref(null)
-const loading = ref(true)
 const saving = ref(false)
 const error = ref('')
 
@@ -139,48 +142,28 @@ const grupos = computed(() => {
 })
 
 function lastValue(s) {
-  const arr = readings[s.id]
-  return arr && arr.length ? arr[arr.length - 1].valor : null
-}
-
-async function loadReadings(sensorId) {
-  readings[sensorId] = await getLecturas(orchardId, sensorId)
-}
-
-async function load() {
-  loading.value = true
-  error.value = ''
-  try {
-    ;[huerto.value, sensores.value, cultivos.value] = await Promise.all([
-      getHuerto(orchardId),
-      getSensores(orchardId),
-      getCultivos(orchardId),
-    ])
-    await Promise.all(sensores.value.map((s) => loadReadings(s.id)))
-  } catch (e) {
-    error.value = 'No se pudieron cargar los sensores.'
-    console.error(e)
-  } finally {
-    loading.value = false
-  }
+  const arr = lecturasDe(s)
+  return arr.length ? arr[arr.length - 1].valor : null
 }
 
 async function add() {
   if (!nombre.value.trim()) return
   saving.value = true
   error.value = ''
+  const datos = {
+    nombre: nombre.value.trim(),
+    tipo: tipo.value,
+    unidad: SENSOR_TYPES[tipo.value].unidad,
+    cropId: cropId.value || null,
+    deviceId: deviceId.value.trim(),
+  }
+  nombre.value = ''
+  deviceId.value = ''
   try {
-    await createSensor(orchardId, {
-      nombre: nombre.value.trim(),
-      tipo: tipo.value,
-      unidad: SENSOR_TYPES[tipo.value].unidad,
-      cropId: cropId.value || null,
-      deviceId: deviceId.value.trim(),
-    })
-    nombre.value = ''
-    deviceId.value = ''
-    await load()
+    await createSensor(orchardId, datos)
   } catch (e) {
+    nombre.value = datos.nombre
+    deviceId.value = datos.deviceId
     error.value = mensajeError(e, 'No se pudo crear el sensor.')
     console.error(e)
   } finally {
@@ -204,10 +187,9 @@ async function guardarEdicion(s) {
     deviceId: edicion.value.deviceId.trim(),
   }
   error.value = ''
+  edicion.value = null
   try {
     await updateSensor(orchardId, s.id, cambios)
-    Object.assign(s, cambios)
-    edicion.value = null
   } catch (e) {
     error.value = mensajeError(e, 'No se pudo guardar el sensor.')
     console.error(e)
@@ -218,8 +200,6 @@ async function remove(id) {
   if (!confirm('¿Eliminar este sensor?')) return
   try {
     await deleteSensor(orchardId, id)
-    sensores.value = sensores.value.filter((s) => s.id !== id)
-    delete readings[id]
   } catch (e) {
     error.value = mensajeError(e, 'No se pudo eliminar el sensor.')
     console.error(e)
@@ -230,7 +210,6 @@ async function simular(s) {
   busy[s.id] = true
   try {
     await addLectura(orchardId, s.id, simularValor(s.tipo))
-    await loadReadings(s.id)
   } catch (e) {
     error.value = mensajeError(e, 'No se pudo registrar la lectura.')
     console.error(e)
@@ -238,8 +217,6 @@ async function simular(s) {
     busy[s.id] = false
   }
 }
-
-onMounted(load)
 </script>
 
 <style scoped>

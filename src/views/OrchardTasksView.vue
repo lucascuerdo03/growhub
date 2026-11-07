@@ -28,7 +28,8 @@
     </form>
 
     <p v-if="error" class="error">{{ error }}</p>
-    <p v-if="loading" class="muted">Cargando…</p>
+    <p v-if="!listo" class="muted">Cargando…</p>
+    <p v-else-if="!huerto" class="error">No tienes acceso a este huerto o ya no existe.</p>
     <p v-else-if="!tareas.length" class="muted">No hay tareas en este huerto.</p>
 
     <template v-else>
@@ -43,7 +44,7 @@
         <input
           type="checkbox"
           :checked="t.completada"
-          :disabled="!permisos.completeTasks || t.pendiente"
+          :disabled="!permisos.completeTasks"
           @change="toggle(t)"
           title="Marcar como completada"
         />
@@ -55,7 +56,7 @@
             <span v-if="t.frecuenciaRiego" class="tag water">Riego: {{ t.frecuenciaRiego }}</span>
           </div>
         </div>
-        <button v-if="permisos.manageTasks && !t.pendiente" class="del" aria-label="Eliminar" @click="remove(t)">✕</button>
+        <button v-if="permisos.manageTasks" class="del" aria-label="Eliminar" @click="remove(t)">✕</button>
       </li>
     </ul>
     </template>
@@ -63,43 +64,36 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
-import { permisosEn, mensajeError } from '../utils/permissions'
-import { insertarOptimista, quitarOptimista } from '../utils/listas'
+import { useHuerto } from '../composables/useHuertos'
+import { useVivo } from '../composables/useVivo'
+import { mensajeError } from '../utils/permissions'
 import {
-  getHuerto,
-  getCultivos,
-  getTareas,
+  fuenteCultivos,
+  fuenteTareas,
   createTarea,
   updateTarea,
   deleteTarea,
   autopublicarTarea,
 } from '../services/firestoreService'
 
-const { user } = useAuth()
-
-const FRECUENCIAS = [
-  'Sin riego',
-  'Diario',
-  'Cada 2-3 días',
-  'Semanal',
-  'Solo en sequía',
-]
+const FRECUENCIAS = ['Sin riego', 'Diario', 'Cada 2-3 días', 'Semanal', 'Solo en sequía']
 
 const route = useRoute()
 const orchardId = route.params.id
+const { user } = useAuth()
+const { huerto, permisos, listo } = useHuerto(orchardId)
 
-const huerto = ref(null)
-const permisos = computed(() => permisosEn(huerto.value, user.value?.uid))
-const tareas = ref([])
-const cultivos = ref([])
+const siHay = (fuente) => () => (huerto.value ? fuente(orchardId) : null)
+const { datos: cultivos } = useVivo(siHay(fuenteCultivos))
+const { datos: tareas } = useVivo(siHay(fuenteTareas))
+
 const titulo = ref('')
 const descripcion = ref('')
 const cropId = ref(null)
 const frecuenciaRiego = ref('Cada 2-3 días')
-const loading = ref(true)
 const saving = ref(false)
 const error = ref('')
 const filtroPlanta = ref('')
@@ -112,26 +106,8 @@ const tareasFiltradas = computed(() => {
   return tareas.value.filter((t) => t.cropId === filtroPlanta.value)
 })
 
-async function load() {
-  loading.value = true
-  error.value = ''
-  try {
-    ;[huerto.value, tareas.value, cultivos.value] = await Promise.all([
-      getHuerto(orchardId),
-      getTareas(orchardId),
-      getCultivos(orchardId),
-    ])
-  } catch (e) {
-    error.value = 'No se pudieron cargar las tareas.'
-    console.error(e)
-  } finally {
-    loading.value = false
-  }
-}
-
 async function add() {
   if (!titulo.value.trim()) return
-  saving.value = true
   error.value = ''
   const datos = {
     titulo: titulo.value.trim(),
@@ -142,33 +118,30 @@ async function add() {
   titulo.value = ''
   descripcion.value = ''
   cropId.value = null
+  // Un filtro de otra planta ocultaría la tarea recién creada.
+  const f = filtroPlanta.value
+  if (f && f !== (datos.cropId || 'general')) filtroPlanta.value = ''
   try {
-    await insertarOptimista(tareas, { ...datos, completada: false }, () =>
-      createTarea(orchardId, datos),
-    )
+    await createTarea(orchardId, datos)
   } catch (e) {
     titulo.value = datos.titulo
     descripcion.value = datos.descripcion
     cropId.value = datos.cropId
     error.value = mensajeError(e, 'No se pudo crear la tarea.')
     console.error(e)
-  } finally {
-    saving.value = false
   }
 }
 
 async function toggle(t) {
   const nuevo = !t.completada
-  t.completada = nuevo // optimista
+  error.value = ''
   try {
     await updateTarea(orchardId, t.id, { completada: nuevo })
   } catch (e) {
-    t.completada = !nuevo // revertir solo si falla el guardado
     error.value = mensajeError(e, 'No se pudo actualizar la tarea.')
     console.error(e)
     return
   }
-  // Al completar, se autopublica en el cuaderno del huerto (no es crítico).
   if (nuevo && permisos.value.publishPosts) {
     await autopublicarTarea(orchardId, t.titulo, user.value)
   }
@@ -178,14 +151,12 @@ async function remove(t) {
   if (!confirm('¿Eliminar esta tarea?')) return
   error.value = ''
   try {
-    await quitarOptimista(tareas, t, () => deleteTarea(orchardId, t.id))
+    await deleteTarea(orchardId, t.id)
   } catch (e) {
     error.value = mensajeError(e, 'No se pudo eliminar la tarea.')
     console.error(e)
   }
 }
-
-onMounted(load)
 </script>
 
 <style scoped>

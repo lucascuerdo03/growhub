@@ -1,6 +1,6 @@
 <template>
   <div>
-    <p v-if="loading" class="muted center">Cargando…</p>
+    <p v-if="!listos" class="muted center">Cargando…</p>
 
     <template v-else>
       <header class="head">
@@ -127,17 +127,19 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, defineAsyncComponent } from 'vue'
+import { ref, computed, defineAsyncComponent } from 'vue'
 import { Plus, Sprout, Leaf, ListChecks, X } from 'lucide-vue-next'
 import { useAuth } from '../composables/useAuth'
 import { useInvitaciones } from '../composables/useInvitaciones'
+import { useHuertos, usePorHuerto } from '../composables/useHuertos'
 import { nombreRol, rolEn } from '../utils/permissions'
 import BaseModal from '../components/BaseModal.vue'
 import ImageUpload from '../components/ImageUpload.vue'
 import StoredImage from '../components/StoredImage.vue'
 const LocationMap = defineAsyncComponent(() => import('../components/LocationMap.vue'))
 import {
-  getResumen,
+  fuenteCultivos,
+  fuenteTareas,
   createHuerto,
   updateHuerto,
   deleteHuerto,
@@ -146,11 +148,24 @@ import {
 
 const { user } = useAuth()
 const { invitaciones } = useInvitaciones()
-const huertos = ref([])
+const { huertos: lista, listos } = useHuertos()
+const { porHuerto: cultivos } = usePorHuerto(fuenteCultivos)
+const { porHuerto: tareas } = usePorHuerto(fuenteTareas)
+
+const huertos = computed(() =>
+  lista.value.map((h) => ({
+    ...h,
+    nCultivos: (cultivos.value[h.id] || []).length,
+    nTareasPend: (tareas.value[h.id] || []).filter((t) => !t.completada).length,
+  })),
+)
 const propios = computed(() => huertos.value.filter((h) => h.ownerId === user.value.uid))
 const compartidos = computed(() => huertos.value.filter((h) => h.ownerId !== user.value.uid))
-const totals = ref({ huertos: 0, cultivos: 0, tareasPend: 0, sensores: 0 })
-const loading = ref(true)
+const totals = computed(() => ({
+  huertos: huertos.value.length,
+  cultivos: huertos.value.reduce((n, h) => n + h.nCultivos, 0),
+  tareasPend: huertos.value.reduce((n, h) => n + h.nTareasPend, 0),
+}))
 const error = ref('')
 
 const showModal = ref(false)
@@ -184,21 +199,6 @@ function closeModal() {
   modalError.value = ''
 }
 
-async function load() {
-  loading.value = true
-  error.value = ''
-  try {
-    const r = await getResumen(user.value.uid)
-    huertos.value = r.huertos
-    totals.value = r.totals
-  } catch (e) {
-    error.value = 'No se pudieron cargar los huertos. Revisa tu conexión e inténtalo de nuevo.'
-    console.error(e)
-  } finally {
-    loading.value = false
-  }
-}
-
 async function add() {
   if (!nombre.value.trim()) return
   saving.value = true
@@ -229,7 +229,6 @@ async function add() {
       console.error(e)
     }
   }
-  await load()
   error.value = errorFoto
   saving.value = false
 }
@@ -238,14 +237,12 @@ async function remove(id) {
   if (!confirm('¿Eliminar este huerto? Esta acción no se puede deshacer.')) return
   try {
     await deleteHuerto(id)
-    await load()
   } catch (e) {
     error.value = 'No se pudo eliminar el huerto.'
     console.error(e)
   }
 }
 
-onMounted(load)
 </script>
 
 <style scoped>

@@ -1,6 +1,8 @@
 import { ref } from 'vue'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '../firebase'
+import { cerrarTodo } from './useVivo'
+import { vaciarFotos } from '../services/firestoreService'
 
 // Estado de sesión compartido en toda la app.
 // Guardamos un objeto plano (no el User de Firebase) para que cambios de
@@ -21,6 +23,11 @@ function mapUser(u) {
 }
 
 onAuthStateChanged(auth, (u) => {
+  // Al cambiar de cuenta no puede quedar nada de la anterior.
+  if (user.value && user.value.uid !== u?.uid) {
+    cerrarTodo()
+    vaciarFotos()
+  }
   user.value = mapUser(u)
   ready.value = true
 })

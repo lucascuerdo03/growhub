@@ -35,7 +35,7 @@
 
     <main class="content">
       <div class="container">
-        <router-view />
+        <router-view :key="$route.path" />
       </div>
     </main>
   </div>
@@ -47,11 +47,8 @@ import { useRouter } from 'vue-router'
 import { LogOut, Menu } from 'lucide-vue-next'
 import { logoutUser } from '../services/authService'
 import { useAuth } from '../composables/useAuth'
-import {
-  useInvitaciones,
-  escucharInvitaciones,
-  dejarDeEscucharInvitaciones,
-} from '../composables/useInvitaciones'
+import { useInvitaciones } from '../composables/useInvitaciones'
+import { escucharMisHuertos, pararHuertos } from '../composables/useHuertos'
 import { asegurarUsuario } from '../services/firestoreService'
 
 const router = useRouter()
@@ -59,12 +56,14 @@ const { user } = useAuth()
 const { invitaciones } = useInvitaciones()
 const open = ref(false)
 
+// Antes de montar las vistas hijas, que leen de esta lista.
+escucharMisHuertos(user.value.uid)
+onBeforeUnmount(pararHuertos)
+
 onMounted(() => {
-  escucharInvitaciones(user.value.email)
   // Cuentas creadas antes de existir users/{uid}.
   asegurarUsuario(user.value).catch((e) => console.warn('No se pudo guardar el perfil:', e))
 })
-onBeforeUnmount(dejarDeEscucharInvitaciones)
 
 const initial = computed(() =>
   (user.value?.displayName || user.value?.email || '?').charAt(0).toUpperCase(),

@@ -3,7 +3,7 @@
     <router-link :to="`/orchard/${orchardId}`" class="back">← Volver al huerto</router-link>
     <h1>Ajustes del huerto</h1>
 
-    <p v-if="loading" class="muted">Cargando…</p>
+    <p v-if="!listo" class="muted">Cargando…</p>
 
     <p v-else-if="huerto && !permisos.admin" class="error">
       Solo el propietario o un administrador pueden cambiar los ajustes de este huerto.
@@ -48,20 +48,18 @@
       </div>
     </template>
 
-    <p v-else-if="!error" class="error">No se encontró el huerto.</p>
-    <p v-else class="error">{{ error }}</p>
+    <p v-else class="error">No tienes acceso a este huerto o ya no existe.</p>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useAuth } from '../composables/useAuth'
-import { permisosEn, mensajeError } from '../utils/permissions'
+import { useHuerto } from '../composables/useHuertos'
+import { mensajeError } from '../utils/permissions'
 import LocationMap from '../components/LocationMap.vue'
 import ImageUpload from '../components/ImageUpload.vue'
 import {
-  getHuerto,
   updateHuerto,
   deleteHuerto,
   resolverFoto,
@@ -71,17 +69,13 @@ import {
 const route = useRoute()
 const router = useRouter()
 const orchardId = route.params.id
-const { user } = useAuth()
-
-const huerto = ref(null)
-const permisos = computed(() => permisosEn(huerto.value, user.value?.uid))
+const { huerto, permisos, listo } = useHuerto(orchardId)
 const nombre = ref('')
 const descripcion = ref('')
 const foto = ref('')
 const fotoQuitada = ref(false)
 const lat = ref(null)
 const lng = ref(null)
-const loading = ref(true)
 const saving = ref(false)
 const saved = ref(false)
 const error = ref('')
@@ -92,23 +86,20 @@ function onPick({ lat: la, lng: ln }) {
   saved.value = false
 }
 
-async function load() {
-  loading.value = true
-  try {
-    huerto.value = await getHuerto(orchardId)
-    if (huerto.value) {
-      nombre.value = huerto.value.nombre || ''
-      descripcion.value = huerto.value.descripcion || ''
-      lat.value = huerto.value.lat ?? null
-      lng.value = huerto.value.lng ?? null
-    }
-  } catch (e) {
-    error.value = 'No tienes acceso a este huerto o ya no existe.'
-    console.error(e)
-  } finally {
-    loading.value = false
-  }
-}
+// El formulario se rellena una sola vez: un cambio de otro miembro no debe pisar
+// lo que se está escribiendo.
+const stop = watch(
+  huerto,
+  (h) => {
+    if (!h) return
+    nombre.value = h.nombre || ''
+    descripcion.value = h.descripcion || ''
+    lat.value = h.lat ?? null
+    lng.value = h.lng ?? null
+    queueMicrotask(() => stop())
+  },
+  { immediate: true },
+)
 
 async function save() {
   saving.value = true
@@ -127,7 +118,6 @@ async function save() {
       lng: lng.value,
     }
     await updateHuerto(orchardId, cambios)
-    huerto.value = { ...huerto.value, ...cambios }
     foto.value = ''
     fotoQuitada.value = false
     await limpiarFoto(orchardId, anterior, fotoId)
@@ -151,7 +141,6 @@ async function remove() {
   }
 }
 
-onMounted(load)
 </script>
 
 <style scoped>

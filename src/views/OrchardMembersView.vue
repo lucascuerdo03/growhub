@@ -6,7 +6,7 @@
 
     <p v-if="error" class="error">{{ error }}</p>
     <p v-if="info" class="success">{{ info }}</p>
-    <p v-if="loading" class="muted">Cargando…</p>
+    <p v-if="!listo" class="muted">Cargando…</p>
 
     <template v-else-if="huerto">
       <section class="card">
@@ -100,23 +100,23 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
+import { useHuerto } from '../composables/useHuertos'
+import { useVivo } from '../composables/useVivo'
 import {
-  getHuerto,
+  fuenteInvitacionesHuerto,
   getUsuario,
   setMiembro,
   quitarMiembro,
   invitarMiembro,
-  getInvitacionesHuerto,
   cancelarInvitacion,
 } from '../services/firestoreService'
 import {
   PERMISOS,
   ROLES_ASIGNABLES,
   nombreRol,
-  permisosEn,
   rolEn,
   miembroConRol,
   mensajeError,
@@ -127,18 +127,17 @@ const router = useRouter()
 const orchardId = route.params.id
 const { user } = useAuth()
 
-const huerto = ref(null)
+const { huerto, permisos, listo } = useHuerto(orchardId)
+const { datos: pendientes } = useVivo(() =>
+  huerto.value ? fuenteInvitacionesHuerto(orchardId) : null,
+)
 const usuarios = ref({})
-const pendientes = ref([])
-const loading = ref(true)
 const error = ref('')
 const info = ref('')
 const abierto = ref('')
 const email = ref('')
 const rolInvitado = ref('colaborador')
 const invitando = ref(false)
-
-const permisos = computed(() => permisosEn(huerto.value, user.value.uid))
 
 // Solo un administrador o el propietario puede dar el rol de administrador.
 const rolesInvitables = computed(() =>
@@ -173,37 +172,24 @@ function fallar(e, texto) {
   console.error(e)
 }
 
-async function load() {
-  loading.value = true
-  error.value = ''
-  try {
-    huerto.value = await getHuerto(orchardId)
-  } catch (e) {
-    huerto.value = null
-    console.error(e)
-  }
-  if (huerto.value) {
-    const [perfiles, invitaciones] = await Promise.allSettled([
-      Promise.allSettled((huerto.value.memberIds || []).map((uid) => getUsuario(uid))),
-      getInvitacionesHuerto(orchardId),
-    ])
-    if (perfiles.status === 'fulfilled') {
-      const mapa = {}
-      huerto.value.memberIds?.forEach((uid, i) => {
-        if (perfiles.value[i].status === 'fulfilled') mapa[uid] = perfiles.value[i].value
-      })
-      usuarios.value = mapa
-    }
-    if (invitaciones.status === 'fulfilled') pendientes.value = invitaciones.value
-    else console.warn('No se pudieron cargar las invitaciones:', invitaciones.reason)
-  }
-  loading.value = false
-}
+// Nombres y emails de los miembros: se piden al aparecer alguien nuevo.
+watch(
+  () => huerto.value?.memberIds || [],
+  async (ids) => {
+    const nuevos = ids.filter((uid) => !usuarios.value[uid])
+    const perfiles = await Promise.allSettled(nuevos.map((uid) => getUsuario(uid)))
+    const mapa = { ...usuarios.value }
+    nuevos.forEach((uid, i) => {
+      if (perfiles[i].status === 'fulfilled' && perfiles[i].value) mapa[uid] = perfiles[i].value
+    })
+    usuarios.value = mapa
+  },
+  { immediate: true },
+)
 
 async function guardarMiembro(m, datos, texto) {
   try {
     await setMiembro(orchardId, m.uid, datos)
-    huerto.value.members[m.uid] = datos
     avisar(texto)
   } catch (e) {
     fallar(e, 'No se pudo guardar el cambio.')
@@ -224,8 +210,6 @@ async function expulsar(m) {
   if (!confirm(`¿Expulsar a ${m.nombre} de este huerto?`)) return
   try {
     await quitarMiembro(orchardId, m.uid)
-    huerto.value.memberIds = huerto.value.memberIds.filter((uid) => uid !== m.uid)
-    delete huerto.value.members[m.uid]
     avisar(`${m.nombre} ya no es miembro del huerto.`)
   } catch (e) {
     fallar(e, 'No se pudo expulsar al miembro.')
@@ -260,7 +244,6 @@ async function invitar() {
   invitando.value = true
   try {
     await invitarMiembro(huerto.value, correo, rolInvitado.value, user.value)
-    pendientes.value = await getInvitacionesHuerto(orchardId)
     email.value = ''
     avisar(`Invitación creada para ${correo}.`)
   } catch (e) {
@@ -273,14 +256,12 @@ async function invitar() {
 async function cancelar(inv) {
   try {
     await cancelarInvitacion(inv.id)
-    pendientes.value = pendientes.value.filter((i) => i.id !== inv.id)
     avisar('Invitación cancelada.')
   } catch (e) {
     fallar(e, 'No se pudo cancelar la invitación.')
   }
 }
 
-onMounted(load)
 </script>
 
 <style scoped>

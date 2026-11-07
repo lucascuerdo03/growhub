@@ -30,6 +30,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { useInvitaciones } from '../composables/useInvitaciones'
+import { esperarHuerto } from '../composables/useHuertos'
 import { aceptarInvitacion, rechazarInvitacion } from '../services/firestoreService'
 import { nombreRol } from '../utils/permissions'
 
@@ -44,6 +45,7 @@ async function aceptar(inv) {
   error.value = ''
   try {
     await aceptarInvitacion(inv, user.value.uid)
+    await esperarHuerto(inv.orchardId)
     router.push(`/orchard/${inv.orchardId}`)
   } catch (e) {
     error.value = 'No se pudo aceptar: puede que el huerto ya no exista o que la invitación se haya cancelado.'

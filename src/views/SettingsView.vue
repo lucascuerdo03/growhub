@@ -22,7 +22,7 @@
 
     <section class="card">
       <h2>Mis huertos</h2>
-      <p v-if="loading" class="muted">Cargando…</p>
+      <p v-if="!listos" class="muted">Cargando…</p>
       <p v-else-if="!huertos.length" class="muted">
         Aún no tienes huertos.
         <router-link to="/dashboard" class="link">Crear uno →</router-link>
@@ -49,44 +49,30 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useAuth } from '../composables/useAuth'
-import { getHuertos, deleteHuerto } from '../services/firestoreService'
+import { useHuertos } from '../composables/useHuertos'
+import { deleteHuerto } from '../services/firestoreService'
 import { nombreRol, rolEn, permisosEn } from '../utils/permissions'
 
 const { user } = useAuth()
-const huertos = ref([])
-const loading = ref(true)
+const { huertos, listos } = useHuertos()
 const error = ref('')
 
 const initial = computed(() =>
   (user.value?.displayName || user.value?.email || '?').charAt(0).toUpperCase(),
 )
 
-async function load() {
-  loading.value = true
-  try {
-    huertos.value = await getHuertos(user.value.uid)
-  } catch (e) {
-    error.value = 'No se pudieron cargar los huertos.'
-    console.error(e)
-  } finally {
-    loading.value = false
-  }
-}
-
 async function remove(h) {
   if (!confirm(`¿Eliminar el huerto "${h.nombre}"? Esta acción no se puede deshacer.`)) return
   try {
     await deleteHuerto(h.id)
-    huertos.value = huertos.value.filter((x) => x.id !== h.id)
   } catch (e) {
     error.value = 'No se pudo eliminar el huerto.'
     console.error(e)
   }
 }
 
-onMounted(load)
 </script>
 
 <style scoped>

@@ -18,9 +18,13 @@
     </section>
 
     <p v-if="error" class="error">{{ error }}</p>
-    <p v-if="loading" class="muted">Cargando…</p>
+    <p v-if="!listo" class="muted">Cargando…</p>
+    <p v-else-if="!huerto" class="error">
+      No tienes acceso a este huerto o ya no existe.
+      <router-link to="/dashboard">Volver a Mis Huertos</router-link>
+    </p>
 
-    <div v-else-if="huerto" class="columns">
+    <div v-if="huerto" class="columns">
       <!-- CULTIVOS -->
       <section class="panel">
         <h2 class="section-title">Cultivos</h2>
@@ -68,7 +72,7 @@
           </select>
           <select v-model="taskCrop" aria-label="Planta de la tarea">
             <option value="">General</option>
-            <option v-for="c in cultivos" :key="c.id" :value="c.id" :disabled="c.pendiente">{{ c.nombre }}</option>
+            <option v-for="c in cultivos" :key="c.id" :value="c.id">{{ c.nombre }}</option>
           </select>
           <button type="submit" :disabled="!taskTitulo.trim()"><Plus :size="18" /></button>
         </form>
@@ -82,7 +86,7 @@
         <p class="group-label">Pendientes</p>
         <p v-if="!pendientes.length" class="muted small">No hay tareas pendientes.</p>
         <div v-for="t in pendientes" :key="t.id" class="task-card">
-          <input type="checkbox" :checked="t.completada" :disabled="!permisos.completeTasks || t.pendiente" @change="toggleTask(t)" />
+          <input type="checkbox" :checked="t.completada" :disabled="!permisos.completeTasks" @change="toggleTask(t)" />
           <div class="task-info">
             <strong>{{ t.titulo }}</strong>
             <div class="tags">
@@ -90,7 +94,7 @@
               <span v-if="t.frecuenciaRiego" class="pill water">Riego: {{ t.frecuenciaRiego }}</span>
             </div>
           </div>
-          <button v-if="permisos.manageTasks && !t.pendiente" class="del" title="Eliminar" @click="removeTask(t)"><X :size="15" /></button>
+          <button v-if="permisos.manageTasks" class="del" title="Eliminar" @click="removeTask(t)"><X :size="15" /></button>
         </div>
 
         <button v-if="completadas.length" class="collapse" @click="showDone = !showDone">
@@ -103,14 +107,14 @@
               <strong>{{ t.titulo }}</strong>
               <div class="tags"><span class="pill plant">{{ plantaDe(t) }}</span></div>
             </div>
-            <button v-if="permisos.manageTasks" class="del" @click="removeTask(t)"><X :size="15" /></button>
+            <button v-if="permisos.manageTasks" class="del" title="Eliminar" @click="removeTask(t)"><X :size="15" /></button>
           </div>
         </template>
       </section>
     </div>
 
     <!-- CUADERNO DE CAMPO -->
-    <section v-if="!loading && huerto" class="panel notebook">
+    <section v-if="huerto" class="panel notebook">
       <h2 class="section-title">Cuaderno de campo</h2>
 
       <form v-if="permisos.publishPosts" class="composer" @submit.prevent="publicar">
@@ -126,7 +130,8 @@
         </div>
       </form>
 
-      <div v-if="!posts.length" class="empty-feed">
+      <p v-if="errorPosts" class="muted small">El cuaderno no está disponible ahora mismo.</p>
+      <div v-else-if="!posts.length" class="empty-feed">
         <MessageSquare :size="34" class="empty-ic" />
         <p class="empty-title">Aún no hay publicaciones</p>
         <p class="muted small">Comparte actualizaciones, notas o fotos de este huerto.</p>
@@ -149,24 +154,24 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { X, ChevronRight, Leaf, Plus, MessageSquare } from 'lucide-vue-next'
 import { useAuth } from '../composables/useAuth'
+import { useHuerto } from '../composables/useHuertos'
+import { useVivo } from '../composables/useVivo'
 import ImageUpload from '../components/ImageUpload.vue'
 import StoredImage from '../components/StoredImage.vue'
-import { nombreRol, permisosEn, mensajeError } from '../utils/permissions'
-import { insertarOptimista, quitarOptimista } from '../utils/listas'
+import { nombreRol, mensajeError } from '../utils/permissions'
 import {
-  getHuerto,
-  getCultivos,
+  fuenteCultivos,
+  fuenteTareas,
+  fuentePosts,
   createCultivo,
   deleteCultivo,
-  getTareas,
   createTarea,
   updateTarea,
   deleteTarea,
-  getPosts,
   createPost,
   deletePost,
   autopublicarTarea,
@@ -179,12 +184,12 @@ const FRECUENCIAS = ['Sin riego', 'Diario', 'Cada 2-3 días', 'Semanal', 'Solo e
 const route = useRoute()
 const orchardId = route.params.id
 const { user } = useAuth()
+const { huerto, permisos, listo } = useHuerto(orchardId)
 
-const huerto = ref(null)
-const cultivos = ref([])
-const tareas = ref([])
-const posts = ref([])
-const loading = ref(true)
+const siHay = (fuente) => () => (huerto.value ? fuente(orchardId) : null)
+const { datos: cultivos } = useVivo(siHay(fuenteCultivos))
+const { datos: tareas } = useVivo(siHay(fuenteTareas))
+const { datos: posts, error: errorPosts } = useVivo(siHay(fuentePosts))
 const error = ref('')
 
 const search = ref('')
@@ -201,7 +206,6 @@ const nuevoPost = ref('')
 const postFoto = ref('')
 const publicando = ref(false)
 
-const permisos = computed(() => permisosEn(huerto.value, user.value?.uid))
 const puedeBorrarPost = (p) =>
   permisos.value.admin || (permisos.value.publishPosts && p.autorId === user.value?.uid)
 
@@ -225,6 +229,11 @@ const tareasFiltradas = computed(() => {
 const pendientes = computed(() => tareasFiltradas.value.filter((t) => !t.completada))
 const completadas = computed(() => tareasFiltradas.value.filter((t) => t.completada))
 
+// Al filtrar por una planta, las tareas nuevas se proponen para esa planta.
+watch(filtroPlanta, (f) => {
+  taskCrop.value = f && f !== 'general' ? f : ''
+})
+
 function fecha(ts) {
   const d = ts?.toDate ? ts.toDate() : new Date()
   return d.toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
@@ -238,33 +247,6 @@ function autorInfo() {
   }
 }
 
-async function load() {
-  loading.value = true
-  error.value = ''
-  // Cada sección se carga de forma independiente: si una falla (p. ej. las
-  // publicaciones por permisos), el resto del huerto se sigue viendo.
-  const [hRes, cRes, tRes, pRes] = await Promise.allSettled([
-    getHuerto(orchardId),
-    getCultivos(orchardId),
-    getTareas(orchardId),
-    getPosts(orchardId),
-  ])
-  if (hRes.status === 'fulfilled') huerto.value = hRes.value
-  if (cRes.status === 'fulfilled') cultivos.value = cRes.value
-  if (tRes.status === 'fulfilled') tareas.value = tRes.value
-  if (pRes.status === 'fulfilled') posts.value = pRes.value
-
-  // Solo es un error real si no se pudo cargar el huerto en sí.
-  if (hRes.status === 'rejected' || !hRes.value) {
-    // Las reglas rechazan la lectura si ya no soy miembro (o si no existe).
-    error.value = 'No tienes acceso a este huerto o ya no existe.'
-    if (hRes.reason) console.error(hRes.reason)
-  } else if (pRes.status === 'rejected') {
-    console.warn('Cuaderno de campo no disponible (revisa las reglas de posts):', pRes.reason)
-  }
-  loading.value = false
-}
-
 async function addCrop() {
   if (!cropNombre.value.trim()) return
   guardandoCultivo.value = true
@@ -272,17 +254,11 @@ async function addCrop() {
   let fotoId = ''
   try {
     if (cropFoto.value) fotoId = await createFoto(orchardId, cropFoto.value)
-    const datos = {
-      nombre: cropNombre.value.trim(),
-      especie: cropEspecie.value.trim(),
-      fotoId,
-    }
-    const id = await createCultivo(orchardId, datos)
-    // Se muestra al instante, sin recargar la lista.
-    cultivos.value.unshift({ id, ...datos })
+    const datos = { nombre: cropNombre.value.trim(), especie: cropEspecie.value.trim(), fotoId }
     cropNombre.value = ''
     cropEspecie.value = ''
     cropFoto.value = ''
+    await createCultivo(orchardId, datos)
   } catch (e) {
     await limpiarFoto(orchardId, fotoId, '')
     error.value = mensajeError(e, 'No se pudo crear el cultivo.')
@@ -296,7 +272,7 @@ async function removeCrop(c) {
   if (!confirm('¿Eliminar este cultivo?')) return
   error.value = ''
   try {
-    await quitarOptimista(cultivos, c, () => deleteCultivo(orchardId, c.id, c.fotoId))
+    await deleteCultivo(orchardId, c.id, c.fotoId)
   } catch (e) {
     error.value = mensajeError(e, 'No se pudo eliminar el cultivo.')
     console.error(e)
@@ -304,15 +280,17 @@ async function removeCrop(c) {
 }
 
 async function addTask() {
-  if (!taskTitulo.value.trim()) return
   const titulo = taskTitulo.value.trim()
+  if (!titulo) return
   const datos = { titulo, frecuenciaRiego: taskFrec.value, cropId: taskCrop.value || null }
   error.value = ''
   taskTitulo.value = ''
+  // Un filtro de otra planta ocultaría la tarea recién creada: parecería que no se
+  // ha guardado hasta recargar.
+  const f = filtroPlanta.value
+  if (f && f !== (datos.cropId || 'general')) filtroPlanta.value = ''
   try {
-    await insertarOptimista(tareas, { ...datos, completada: false }, () =>
-      createTarea(orchardId, datos),
-    )
+    await createTarea(orchardId, datos)
   } catch (e) {
     taskTitulo.value = titulo
     error.value = mensajeError(e, 'No se pudo crear la tarea.')
@@ -322,21 +300,16 @@ async function addTask() {
 
 async function toggleTask(t) {
   const nuevo = !t.completada
-  t.completada = nuevo // optimista
+  error.value = ''
   try {
     await updateTarea(orchardId, t.id, { completada: nuevo })
   } catch (e) {
-    t.completada = !nuevo // revertir solo si falla el guardado de la tarea
     error.value = mensajeError(e, 'No se pudo actualizar la tarea.')
     console.error(e)
     return
   }
-  // Al completar una tarea se publica automáticamente en el cuaderno. Si esto
-  // falla (p. ej. reglas de posts no publicadas) NO revertimos la tarea: ya
-  // quedó completada correctamente.
   if (nuevo && permisos.value.publishPosts) {
-    const post = await autopublicarTarea(orchardId, t.titulo, user.value)
-    if (post) posts.value.unshift(post)
+    await autopublicarTarea(orchardId, t.titulo, user.value)
   }
 }
 
@@ -344,7 +317,7 @@ async function removeTask(t) {
   if (!confirm('¿Eliminar esta tarea?')) return
   error.value = ''
   try {
-    await quitarOptimista(tareas, t, () => deleteTarea(orchardId, t.id))
+    await deleteTarea(orchardId, t.id)
   } catch (e) {
     error.value = mensajeError(e, 'No se pudo eliminar la tarea.')
     console.error(e)
@@ -359,11 +332,9 @@ async function publicar() {
   try {
     if (postFoto.value) fotoId = await createFoto(orchardId, postFoto.value)
     const datos = { texto: nuevoPost.value.trim(), fotoId, ...autorInfo() }
-    const { id } = await createPost(orchardId, datos)
-    // La entrada aparece al instante en el feed.
-    posts.value.unshift({ id, createdAt: { toDate: () => new Date() }, ...datos })
     nuevoPost.value = ''
     postFoto.value = ''
+    await createPost(orchardId, datos)
   } catch (e) {
     await limpiarFoto(orchardId, fotoId, '')
     error.value = mensajeError(e, 'No se pudo publicar.')
@@ -375,16 +346,14 @@ async function publicar() {
 
 async function removePost(p) {
   if (!confirm('¿Eliminar esta publicación?')) return
+  error.value = ''
   try {
     await deletePost(orchardId, p.id, p.fotoId)
-    posts.value = posts.value.filter((x) => x.id !== p.id)
   } catch (e) {
     error.value = mensajeError(e, 'No se pudo eliminar la publicación.')
     console.error(e)
   }
 }
-
-onMounted(load)
 </script>
 
 <style scoped>

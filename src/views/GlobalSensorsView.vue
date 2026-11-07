@@ -6,7 +6,7 @@
     </header>
 
     <p v-if="error" class="error">{{ error }}</p>
-    <p v-if="loading" class="muted">Cargando…</p>
+    <p v-if="!listos" class="muted">Cargando…</p>
 
     <template v-else-if="!huertos.length">
       <div class="empty">
@@ -49,7 +49,7 @@
         </div>
 
         <SensorChart
-          v-if="s.lecturas && s.lecturas.length"
+          v-if="s.lecturas.length"
           :lecturas="s.lecturas"
           :label="`${s.nombre} (${s.unidad})`"
           :color="SENSOR_TYPES[s.tipo]?.color"
@@ -65,25 +65,39 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { useAuth } from '../composables/useAuth'
+import { useHuertos, usePorHuerto } from '../composables/useHuertos'
+import { useVivoMuchos } from '../composables/useVivo'
 import { permisosEn, mensajeError } from '../utils/permissions'
 import SensorChart from '../components/SensorChart.vue'
 import { SENSOR_TYPES, simularValor } from '../utils/sensorTypes'
 import {
-  getHuertos,
-  getAllSensores,
-  getCultivos,
+  fuenteSensores,
+  fuenteLecturas,
+  fuenteCultivos,
   addLectura,
-  getLecturas,
 } from '../services/firestoreService'
 
 const { user } = useAuth()
-const huertos = ref([])
-const sensores = ref([])
-const cultivos = ref({}) // orchardId -> [cultivos]
+const { huertos, listos } = useHuertos()
+const { porHuerto: sensoresPorHuerto } = usePorHuerto(fuenteSensores)
+const { porHuerto: cultivos } = usePorHuerto(fuenteCultivos)
+
+const base = computed(() =>
+  huertos.value.flatMap((h) =>
+    (sensoresPorHuerto.value[h.id] || []).map((s) => ({ ...s, orchardId: h.id, orchardNombre: h.nombre })),
+  ),
+)
+const { porClave } = useVivoMuchos(() => base.value.map((s) => fuenteLecturas(s.orchardId, s.id)))
+const sensores = computed(() =>
+  base.value.map((s) => ({
+    ...s,
+    lecturas: porClave.value[fuenteLecturas(s.orchardId, s.id).clave] || [],
+  })),
+)
+
 const busy = reactive({})
-const loading = ref(true)
 const error = ref('')
 
 const plantaDe = (s) => cultivos.value[s.orchardId]?.find((c) => c.id === s.cropId)?.nombre
@@ -92,26 +106,7 @@ const puedeSimular = (s) =>
   permisosEn(huertos.value.find((h) => h.id === s.orchardId), user.value.uid).manageSensors
 
 function lastValue(s) {
-  return s.lecturas && s.lecturas.length ? s.lecturas[s.lecturas.length - 1].valor : null
-}
-
-async function load() {
-  loading.value = true
-  error.value = ''
-  try {
-    huertos.value = await getHuertos(user.value.uid)
-    const [todos, listas] = await Promise.all([
-      getAllSensores(huertos.value),
-      Promise.all(huertos.value.map((h) => getCultivos(h.id))),
-    ])
-    sensores.value = todos
-    cultivos.value = Object.fromEntries(huertos.value.map((h, i) => [h.id, listas[i]]))
-  } catch (e) {
-    error.value = 'No se pudieron cargar los sensores.'
-    console.error(e)
-  } finally {
-    loading.value = false
-  }
+  return s.lecturas.length ? s.lecturas[s.lecturas.length - 1].valor : null
 }
 
 async function simular(s) {
@@ -119,7 +114,6 @@ async function simular(s) {
   busy[key] = true
   try {
     await addLectura(s.orchardId, s.id, simularValor(s.tipo))
-    s.lecturas = await getLecturas(s.orchardId, s.id)
   } catch (e) {
     error.value = mensajeError(e, 'No se pudo registrar la lectura.')
     console.error(e)
@@ -127,8 +121,6 @@ async function simular(s) {
     busy[key] = false
   }
 }
-
-onMounted(load)
 </script>
 
 <style scoped>

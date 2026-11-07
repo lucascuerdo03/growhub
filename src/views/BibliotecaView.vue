@@ -87,17 +87,20 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { Leaf } from 'lucide-vue-next'
 import { useAuth } from '../composables/useAuth'
+import { useHuertos } from '../composables/useHuertos'
 import BaseModal from '../components/BaseModal.vue'
 import { CROPS_LIBRARY } from '../data/cropsLibrary'
-import { getHuertos, createCultivo } from '../services/firestoreService'
+import { createCultivo } from '../services/firestoreService'
 import { permisosEn } from '../utils/permissions'
 
 const { user } = useAuth()
 const search = ref('')
-const huertos = ref([])
+const { huertos: todos } = useHuertos()
+// Solo se puede añadir a huertos donde tengo permiso para gestionar cultivos.
+const huertos = computed(() => todos.value.filter((h) => permisosEn(h, user.value.uid).manageCrops))
 const sel = ref(null)
 const destino = ref(null)
 const adding = ref(false)
@@ -157,16 +160,6 @@ async function anadir() {
     adding.value = false
   }
 }
-
-onMounted(async () => {
-  try {
-    // Solo se puede añadir a huertos donde tengo permiso para gestionar cultivos.
-    const todos = await getHuertos(user.value.uid)
-    huertos.value = todos.filter((h) => permisosEn(h, user.value.uid).manageCrops)
-  } catch (e) {
-    console.error(e)
-  }
-})
 </script>
 
 <style scoped>

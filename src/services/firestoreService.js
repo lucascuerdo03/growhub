@@ -21,6 +21,24 @@ import {
 import { db, auth } from '../firebase'
 import { miembroConRol } from '../utils/permissions'
 
+// Documentos de un snapshot. `estimate` da fecha también a lo recién escrito, que
+// aún no tiene la hora del servidor.
+const docsDe = (snap) =>
+  snap.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }) }))
+
+// Fuente de useVivo para una consulta. Evita consultas con where + orderBy sobre
+// campos distintos: Firestore pediría un índice compuesto, que hay que crear a mano
+// en la consola, y el emulador no avisa de que falta.
+const fuenteConsulta = (clave, crearConsulta, transformar = (x) => x) => ({
+  clave,
+  escuchar: (alRecibir, alFallar) =>
+    onSnapshot(crearConsulta(), (snap) => alRecibir(transformar(docsDe(snap))), alFallar),
+})
+
+const subcoleccion = (orchardId, nombre) => collection(db, 'orchards', orchardId, nombre)
+const porFechaDesc = (orchardId, nombre) =>
+  query(subcoleccion(orchardId, nombre), orderBy('createdAt', 'desc'))
+
 /* ----------------------------- Usuarios ---------------------------- */
 // users/{uid}: nombre y email en minúsculas, para mostrar a los miembros.
 
@@ -47,39 +65,49 @@ const porFecha = (a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds |
 
 // Los huertos anteriores a los roles no tienen miembros: su dueño pasa a figurar
 // como propietario la primera vez que los carga.
-const migrarHuerto = async (h, uid) => {
-  if (h.ownerId !== uid || h.memberIds) return h
-  const campos = { memberIds: [uid], members: { [uid]: miembroConRol('propietario') } }
+export const migrarHuerto = async (h, uid) => {
   try {
-    await updateDoc(doc(db, 'orchards', h.id), campos)
-    return { ...h, ...campos }
+    await updateDoc(doc(db, 'orchards', h.id), {
+      memberIds: [uid],
+      members: { [uid]: miembroConRol('propietario') },
+    })
   } catch (e) {
     console.warn('No se pudo migrar el huerto:', e)
-    return h
   }
 }
 
-// Huertos propios y compartidos conmigo. Las dos consultas coinciden con las
-// reglas (una rama de `allow read` cada una). Se piden por separado para que los
-// huertos propios se sigan viendo aunque falle la de los compartidos.
-export const getHuertos = async (uid) => {
+// Huertos propios y compartidos conmigo. Las dos consultas coinciden con las reglas
+// (una rama de `allow read` cada una) y se escuchan por separado: si falla la de
+// compartidos, los huertos propios se siguen viendo.
+export const escucharHuertos = (uid, alRecibir, alFallar) => {
   const col = collection(db, 'orchards')
-  const [propios, compartidos] = await Promise.allSettled([
-    getDocs(query(col, where('ownerId', '==', uid))),
-    getDocs(query(col, where('memberIds', 'array-contains', uid))),
-  ])
-  if (propios.status === 'rejected') throw propios.reason
-  if (compartidos.status === 'rejected') {
-    console.warn('No se pudieron cargar los huertos compartidos:', compartidos.reason)
+  const partes = { propios: null, compartidos: null }
+  const emitir = () => {
+    if (partes.propios === null) return
+    const porId = new Map()
+    for (const h of [...partes.propios, ...(partes.compartidos || [])]) porId.set(h.id, h)
+    alRecibir([...porId.values()].sort(porFecha))
   }
-  const porId = new Map()
-  for (const res of [propios, compartidos]) {
-    if (res.status === 'fulfilled') {
-      res.value.docs.forEach((d) => porId.set(d.id, { id: d.id, ...d.data() }))
-    }
+  const pararPropios = onSnapshot(
+    query(col, where('ownerId', '==', uid)),
+    (snap) => {
+      partes.propios = docsDe(snap)
+      emitir()
+    },
+    alFallar,
+  )
+  const pararCompartidos = onSnapshot(
+    query(col, where('memberIds', 'array-contains', uid)),
+    (snap) => {
+      partes.compartidos = docsDe(snap)
+      emitir()
+    },
+    (e) => console.warn('No se pudieron cargar los huertos compartidos:', e),
+  )
+  return () => {
+    pararPropios()
+    pararCompartidos()
   }
-  const huertos = await Promise.all([...porId.values()].map((h) => migrarHuerto(h, uid)))
-  return huertos.sort(porFecha)
 }
 
 export const createHuerto = async (
@@ -97,12 +125,6 @@ export const createHuerto = async (
     createdAt: serverTimestamp(),
   })
   return ref.id
-}
-
-export const getHuerto = async (id) => {
-  const snap = await getDoc(doc(db, 'orchards', id))
-  if (!snap.exists()) return null
-  return migrarHuerto({ id: snap.id, ...snap.data() }, auth.currentUser?.uid)
 }
 
 // Actualiza campos del huerto (nombre, descripción, lat, lng…).
@@ -166,30 +188,28 @@ export const invitarMiembro = (huerto, email, role, invitador) => {
   })
 }
 
-export const getInvitacionesHuerto = async (orchardId) => {
-  const snap = await getDocs(
+// Las dos consultas son solo de igualdad: no necesitan índice compuesto.
+export const fuenteInvitacionesHuerto = (orchardId) =>
+  fuenteConsulta(`invitations:${orchardId}`, () =>
     query(
       collection(db, 'invitations'),
       where('orchardId', '==', orchardId),
       where('status', '==', 'pending'),
     ),
   )
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-}
 
 export const cancelarInvitacion = (id) => deleteDoc(doc(db, 'invitations', id))
 
-// Avisa en tiempo real de mis invitaciones pendientes. Devuelve la función para
-// dejar de escuchar.
-export const escucharMisInvitaciones = (email, alCambiar, alFallar) =>
-  onSnapshot(
-    query(
-      collection(db, 'invitations'),
-      where('email', '==', email.toLowerCase()),
-      where('status', '==', 'pending'),
-    ),
-    (snap) => alCambiar(snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort(porFecha)),
-    alFallar,
+export const fuenteMisInvitaciones = (email) =>
+  fuenteConsulta(
+    `mis-invitaciones:${email.toLowerCase()}`,
+    () =>
+      query(
+        collection(db, 'invitations'),
+        where('email', '==', email.toLowerCase()),
+        where('status', '==', 'pending'),
+      ),
+    (docs) => [...docs].sort(porFecha),
   )
 
 // En un lote: las reglas del huerto comprueban que la invitación siga pendiente,
@@ -216,14 +236,8 @@ export const rechazarInvitacion = (inv) =>
 /* ----------------------------- Cultivos ---------------------------- */
 // Cada cultivo se guarda como subcolección del huerto: orchards/{id}/crops
 
-export const getCultivos = async (orchardId) => {
-  const q = query(
-    collection(db, 'orchards', orchardId, 'crops'),
-    orderBy('createdAt', 'desc'),
-  )
-  const snap = await getDocs(q)
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-}
+export const fuenteCultivos = (orchardId) =>
+  fuenteConsulta(`crops:${orchardId}`, () => porFechaDesc(orchardId, 'crops'))
 
 export const createCultivo = async (orchardId, data) => {
   const ref = await addDoc(collection(db, 'orchards', orchardId, 'crops'), {
@@ -244,11 +258,6 @@ export const createCultivo = async (orchardId, data) => {
   return ref.id
 }
 
-export const getCultivo = async (orchardId, cropId) => {
-  const snap = await getDoc(doc(db, 'orchards', orchardId, 'crops', cropId))
-  return snap.exists() ? { id: snap.id, ...snap.data() } : null
-}
-
 export const updateCultivo = (orchardId, cropId, data) =>
   updateDoc(doc(db, 'orchards', orchardId, 'crops', cropId), data)
 
@@ -263,14 +272,8 @@ export const deleteCultivo = async (orchardId, cropId, fotoId = '') => {
 // cropId: planta a la que mide (opcional). deviceId: identificador del nodo físico
 // (p. ej. "growhub-nodo-01"), para conectar después el sensor real.
 
-export const getSensores = async (orchardId) => {
-  const q = query(
-    collection(db, 'orchards', orchardId, 'sensors'),
-    orderBy('createdAt', 'desc'),
-  )
-  const snap = await getDocs(q)
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-}
+export const fuenteSensores = (orchardId) =>
+  fuenteConsulta(`sensors:${orchardId}`, () => porFechaDesc(orchardId, 'sensors'))
 
 export const createSensor = async (orchardId, { nombre, tipo, unidad, cropId = null, deviceId = '' }) => {
   const ref = await addDoc(collection(db, 'orchards', orchardId, 'sensors'), {
@@ -299,18 +302,18 @@ export const addLectura = (orchardId, sensorId, valor) =>
     { valor, createdAt: serverTimestamp() },
   )
 
-// Devuelve las últimas `max` lecturas en orden cronológico (ascendente).
-export const getLecturas = async (orchardId, sensorId, max = 30) => {
-  const q = query(
-    collection(db, 'orchards', orchardId, 'sensors', sensorId, 'readings'),
-    orderBy('createdAt', 'desc'),
-    limit(max),
+// Últimas lecturas en orden cronológico (ascendente).
+export const fuenteLecturas = (orchardId, sensorId, max = 30) =>
+  fuenteConsulta(
+    `readings:${orchardId}:${sensorId}`,
+    () =>
+      query(
+        collection(db, 'orchards', orchardId, 'sensors', sensorId, 'readings'),
+        orderBy('createdAt', 'desc'),
+        limit(max),
+      ),
+    (docs) => [...docs].reverse(),
   )
-  const snap = await getDocs(q)
-  return snap.docs
-    .map((d) => ({ id: d.id, ...d.data() }))
-    .reverse()
-}
 
 /* ------------------------------ Tareas ----------------------------- */
 // Tareas como subcolección del huerto: orchards/{id}/tasks
@@ -318,14 +321,8 @@ export const getLecturas = async (orchardId, sensorId, max = 30) => {
 // nombre de la planta se busca siempre por cropId, así que renombrar un cultivo
 // no deja etiquetas viejas y una tarea de un cultivo borrado pasa a ser general.
 
-export const getTareas = async (orchardId) => {
-  const q = query(
-    collection(db, 'orchards', orchardId, 'tasks'),
-    orderBy('createdAt', 'desc'),
-  )
-  const snap = await getDocs(q)
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-}
+export const fuenteTareas = (orchardId) =>
+  fuenteConsulta(`tasks:${orchardId}`, () => porFechaDesc(orchardId, 'tasks'))
 
 export const createTarea = async (orchardId, data) => {
   const ref = await addDoc(collection(db, 'orchards', orchardId, 'tasks'), {
@@ -349,14 +346,8 @@ export const deleteTarea = (orchardId, taskId) =>
 /* ------------------------- Cuaderno de Campo ----------------------- */
 // Publicaciones del huerto (muro social): orchards/{id}/posts
 
-export const getPosts = async (orchardId) => {
-  const q = query(
-    collection(db, 'orchards', orchardId, 'posts'),
-    orderBy('createdAt', 'desc'),
-  )
-  const snap = await getDocs(q)
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-}
+export const fuentePosts = (orchardId) =>
+  fuenteConsulta(`posts:${orchardId}`, () => porFechaDesc(orchardId, 'posts'))
 
 export const createPost = (orchardId, { texto, autorId, autorNombre, autorFoto = '', fotoId = '' }) =>
   addDoc(collection(db, 'orchards', orchardId, 'posts'), {
@@ -369,7 +360,7 @@ export const createPost = (orchardId, { texto, autorId, autorNombre, autorFoto =
   })
 
 // Entrada automática al completar una tarea. No es crítica: si falla, la tarea
-// sigue completada. Devuelve la publicación para añadirla al feed, o null.
+// sigue completada.
 export const autopublicarTarea = async (orchardId, titulo, user) => {
   const datos = {
     texto: `He completado la tarea: ${titulo}`,
@@ -378,11 +369,9 @@ export const autopublicarTarea = async (orchardId, titulo, user) => {
     autorFoto: user.photoURL || '',
   }
   try {
-    const { id } = await createPost(orchardId, datos)
-    return { id, ...datos, createdAt: { toDate: () => new Date() } }
+    await createPost(orchardId, datos)
   } catch (e) {
     console.warn('No se pudo autopublicar en el cuaderno:', e)
-    return null
   }
 }
 
@@ -416,6 +405,8 @@ export const getFoto = async (orchardId, fotoId) => {
   return data
 }
 
+export const vaciarFotos = () => fotosCache.clear()
+
 export const deleteFoto = (orchardId, fotoId) => {
   fotosCache.delete(fotoId)
   return deleteDoc(doc(db, 'orchards', orchardId, 'photos', fotoId))
@@ -436,63 +427,4 @@ export const limpiarFoto = async (orchardId, anteriorId, nuevoId) => {
   } catch (e) {
     console.warn('No se pudo borrar la foto anterior:', e)
   }
-}
-
-/* ----------------------- Agregados globales ------------------------ */
-// Datos de TODOS los huertos del usuario, para las secciones globales
-// (Tareas / Sensores) accesibles sin entrar en un huerto concreto.
-
-export const getAllTareas = async (huertos) => {
-  const listas = await Promise.all(
-    huertos.map(async (h) => {
-      const tareas = await getTareas(h.id)
-      return tareas.map((t) => ({ ...t, orchardId: h.id, orchardNombre: h.nombre }))
-    }),
-  )
-  return listas.flat()
-}
-
-export const getAllSensores = async (huertos) => {
-  const listas = await Promise.all(
-    huertos.map(async (h) => {
-      const sensores = await getSensores(h.id)
-      return Promise.all(
-        sensores.map(async (s) => ({
-          ...s,
-          orchardId: h.id,
-          orchardNombre: h.nombre,
-          lecturas: await getLecturas(h.id, s.id),
-        })),
-      )
-    }),
-  )
-  return listas.flat()
-}
-
-// Resumen para el dashboard: huertos enriquecidos con sus contadores
-// (cultivos, tareas pendientes, sensores) y los totales globales.
-export const getResumen = async (uid) => {
-  const huertos = await getHuertos(uid)
-  const detalles = await Promise.all(
-    huertos.map(async (h) => {
-      const [crops, tasks, sensors] = await Promise.all([
-        getCultivos(h.id),
-        getTareas(h.id),
-        getSensores(h.id),
-      ])
-      return {
-        ...h,
-        nCultivos: crops.length,
-        nTareasPend: tasks.filter((t) => !t.completada).length,
-        nSensores: sensors.length,
-      }
-    }),
-  )
-  const totals = {
-    huertos: detalles.length,
-    cultivos: detalles.reduce((a, h) => a + h.nCultivos, 0),
-    tareasPend: detalles.reduce((a, h) => a + h.nTareasPend, 0),
-    sensores: detalles.reduce((a, h) => a + h.nSensores, 0),
-  }
-  return { huertos: detalles, totals }
 }

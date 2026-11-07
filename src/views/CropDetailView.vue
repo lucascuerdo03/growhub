@@ -2,8 +2,9 @@
   <div>
     <router-link :to="`/orchard/${orchardId}`" class="back">← Volver al huerto</router-link>
 
-    <p v-if="loading" class="muted">Cargando…</p>
-    <p v-else-if="!cultivo" class="error">No se encontró el cultivo.</p>
+    <p v-if="!listo || (huerto && cargandoCultivos)" class="muted">Cargando…</p>
+    <p v-else-if="!huerto" class="error">No tienes acceso a este huerto o ya no existe.</p>
+    <p v-else-if="!cultivo" class="error">Este cultivo ya no existe.</p>
 
     <template v-else>
       <!-- Ficha -->
@@ -79,7 +80,7 @@
           <input
             type="checkbox"
             :checked="t.completada"
-            :disabled="!permisos.completeTasks || t.pendiente"
+            :disabled="!permisos.completeTasks"
             :aria-label="`Completar ${t.titulo}`"
             @change="toggleTask(t)"
           />
@@ -87,7 +88,7 @@
             <strong>{{ t.titulo }}</strong>
             <span v-if="t.frecuenciaRiego" class="muted small">Riego: {{ t.frecuenciaRiego }}</span>
           </div>
-          <button v-if="permisos.manageTasks && !t.pendiente" class="unlink" aria-label="Eliminar" @click="removeTask(t)">✕</button>
+          <button v-if="permisos.manageTasks" class="unlink" aria-label="Eliminar" @click="removeTask(t)">✕</button>
         </div>
       </section>
 
@@ -137,7 +138,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { Leaf } from 'lucide-vue-next'
 import SensorChart from '../components/SensorChart.vue'
@@ -145,21 +146,20 @@ import ImageUpload from '../components/ImageUpload.vue'
 import StoredImage from '../components/StoredImage.vue'
 import { SENSOR_TYPES } from '../utils/sensorTypes'
 import { useAuth } from '../composables/useAuth'
-import { permisosEn, mensajeError } from '../utils/permissions'
-import { insertarOptimista, quitarOptimista } from '../utils/listas'
+import { useHuerto } from '../composables/useHuertos'
+import { useVivo, useVivoMuchos } from '../composables/useVivo'
+import { mensajeError } from '../utils/permissions'
 import {
-  getHuerto,
-  getCultivo,
+  fuenteCultivos,
+  fuenteTareas,
+  fuenteSensores,
+  fuenteLecturas,
   updateCultivo,
-  getTareas,
   createTarea,
   updateTarea,
   deleteTarea,
   autopublicarTarea,
-  getCultivos,
-  getSensores,
   updateSensor,
-  getLecturas,
   resolverFoto,
   limpiarFoto,
 } from '../services/firestoreService'
@@ -170,18 +170,36 @@ const route = useRoute()
 const orchardId = route.params.id
 const cropId = route.params.cropId
 const { user } = useAuth()
+const { huerto, permisos, listo } = useHuerto(orchardId)
 
-const huerto = ref(null)
-const permisos = computed(() => permisosEn(huerto.value, user.value?.uid))
-const cultivo = ref(null)
-const sensores = ref([])
-const cultivosIds = ref([])
-const loading = ref(true)
+// Sin consultas where + orderBy (pedirían un índice compuesto): se escucha la
+// colección y se filtra aquí. Estas listas ya se comparten con la vista del huerto.
+const siHay = (fuente) => () => (huerto.value ? fuente(orchardId) : null)
+const { datos: cultivos, cargando: cargandoCultivos } = useVivo(siHay(fuenteCultivos))
+const { datos: todasTareas } = useVivo(siHay(fuenteTareas))
+const { datos: todosSensores } = useVivo(siHay(fuenteSensores))
+const { porClave: lecturasPorClave } = useVivoMuchos(() =>
+  huerto.value ? todosSensores.value.map((s) => fuenteLecturas(orchardId, s.id)) : [],
+)
+
+const cultivo = computed(() => cultivos.value.find((c) => c.id === cropId) || null)
+const tareas = computed(() => todasTareas.value.filter((t) => t.cropId === cropId))
+const sensores = computed(() =>
+  todosSensores.value.map((s) => ({
+    ...s,
+    lecturas: lecturasPorClave.value[fuenteLecturas(orchardId, s.id).clave] || [],
+  })),
+)
+const sensoresCultivo = computed(() => sensores.value.filter((s) => s.cropId === cropId))
+// Sin planta, o de un cultivo que ya se ha borrado.
+const sensoresDisponibles = computed(() =>
+  sensores.value.filter((s) => !cultivos.value.some((c) => c.id === s.cropId)),
+)
+
 const editing = ref(false)
 const saving = ref(false)
 const savedMsg = ref('')
 const sensorAVincular = ref(null)
-const tareas = ref([])
 const taskTitulo = ref('')
 const taskFrec = ref('Cada 2-3 días')
 const taskError = ref('')
@@ -193,45 +211,18 @@ const fFoto = ref('')
 const fFotoQuitada = ref(false)
 const fDesc = ref('')
 
-const sensoresCultivo = computed(() => sensores.value.filter((s) => s.cropId === cropId))
-// Sin planta, o de un cultivo que ya se ha borrado.
-const sensoresDisponibles = computed(() =>
-  sensores.value.filter((s) => !cultivosIds.value.includes(s.cropId)),
-)
-
-async function cargarSensores() {
-  const lista = await getSensores(orchardId)
-  sensores.value = await Promise.all(
-    lista.map(async (s) => ({ ...s, lecturas: await getLecturas(orchardId, s.id) })),
-  )
-}
-
-async function load() {
-  loading.value = true
-  try {
-    ;[huerto.value, cultivo.value] = await Promise.all([
-      getHuerto(orchardId),
-      getCultivo(orchardId, cropId),
-    ])
-    if (cultivo.value) {
-      fNombre.value = cultivo.value.nombre || ''
-      fEspecie.value = cultivo.value.especie || ''
-      fFecha.value = cultivo.value.fechaSiembra || ''
-      fDesc.value = cultivo.value.descripcion || ''
-    }
-    const [todas, plantas] = await Promise.all([
-      getTareas(orchardId),
-      getCultivos(orchardId),
-      cargarSensores(),
-    ])
-    tareas.value = todas.filter((t) => t.cropId === cropId)
-    cultivosIds.value = plantas.map((c) => c.id)
-  } catch (e) {
-    console.error(e)
-  } finally {
-    loading.value = false
-  }
-}
+// El formulario se rellena al abrirlo: así un cambio de otro miembro no pisa lo
+// que se está escribiendo.
+watch(editing, (abierto) => {
+  if (!abierto || !cultivo.value) return
+  fNombre.value = cultivo.value.nombre || ''
+  fEspecie.value = cultivo.value.especie || ''
+  fFecha.value = cultivo.value.fechaSiembra || ''
+  fDesc.value = cultivo.value.descripcion || ''
+  fFoto.value = ''
+  fFotoQuitada.value = false
+  savedMsg.value = ''
+})
 
 async function guardar() {
   saving.value = true
@@ -249,7 +240,6 @@ async function guardar() {
       descripcion: fDesc.value.trim(),
     }
     await updateCultivo(orchardId, cropId, data)
-    cultivo.value = { ...cultivo.value, ...data }
     fFoto.value = ''
     fFotoQuitada.value = false
     await limpiarFoto(orchardId, anterior, fotoId)
@@ -265,13 +255,10 @@ async function guardar() {
 async function addTask() {
   const titulo = taskTitulo.value.trim()
   if (!titulo) return
-  const datos = { titulo, frecuenciaRiego: taskFrec.value, cropId }
   taskError.value = ''
   taskTitulo.value = ''
   try {
-    await insertarOptimista(tareas, { ...datos, completada: false }, () =>
-      createTarea(orchardId, datos),
-    )
+    await createTarea(orchardId, { titulo, frecuenciaRiego: taskFrec.value, cropId })
   } catch (e) {
     taskTitulo.value = titulo
     taskError.value = mensajeError(e, 'No se pudo crear la tarea.')
@@ -281,12 +268,10 @@ async function addTask() {
 
 async function toggleTask(t) {
   const nuevo = !t.completada
-  t.completada = nuevo
   taskError.value = ''
   try {
     await updateTarea(orchardId, t.id, { completada: nuevo })
   } catch (e) {
-    t.completada = !nuevo
     taskError.value = mensajeError(e, 'No se pudo actualizar la tarea.')
     console.error(e)
     return
@@ -300,7 +285,7 @@ async function removeTask(t) {
   if (!confirm('¿Eliminar esta tarea?')) return
   taskError.value = ''
   try {
-    await quitarOptimista(tareas, t, () => deleteTarea(orchardId, t.id))
+    await deleteTarea(orchardId, t.id)
   } catch (e) {
     taskError.value = mensajeError(e, 'No se pudo eliminar la tarea.')
     console.error(e)
@@ -309,11 +294,12 @@ async function removeTask(t) {
 
 async function vincular() {
   if (!sensorAVincular.value) return
+  const id = sensorAVincular.value
+  sensorAVincular.value = null
   try {
-    await updateSensor(orchardId, sensorAVincular.value, { cropId })
-    sensorAVincular.value = null
-    await cargarSensores()
+    await updateSensor(orchardId, id, { cropId })
   } catch (e) {
+    taskError.value = mensajeError(e, 'No se pudo vincular el sensor.')
     console.error(e)
   }
 }
@@ -321,13 +307,11 @@ async function vincular() {
 async function desvincular(s) {
   try {
     await updateSensor(orchardId, s.id, { cropId: null })
-    await cargarSensores()
   } catch (e) {
+    taskError.value = mensajeError(e, 'No se pudo desvincular el sensor.')
     console.error(e)
   }
 }
-
-onMounted(load)
 </script>
 
 <style scoped>
