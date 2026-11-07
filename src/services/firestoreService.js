@@ -261,6 +261,27 @@ export const rechazarInvitacion = (inv) =>
 export const fuenteCultivos = (orchardId) =>
   fuenteConsulta(`crops:${orchardId}`, () => porFechaDesc(orchardId, 'crops'))
 
+// Un cultivo y sus tareas de una vez, para no dejar a medias ninguna de las dos cosas.
+export const crearCultivoConTareas = async (orchardId, datos, tareas = []) => {
+  const refCultivo = doc(collection(db, 'orchards', orchardId, 'crops'))
+  const batch = writeBatch(db)
+  batch.set(refCultivo, { ...datos, createdAt: serverTimestamp() })
+  for (const t of tareas) {
+    batch.set(doc(collection(db, 'orchards', orchardId, 'tasks')), {
+      titulo: t.titulo,
+      descripcion: '',
+      cropId: refCultivo.id,
+      fecha: t.fecha || '',
+      frecuenciaRiego: t.frecuenciaRiego || '',
+      responsable: '',
+      completada: false,
+      createdAt: serverTimestamp(),
+    })
+  }
+  await batch.commit()
+  return refCultivo.id
+}
+
 export const createCultivo = async (orchardId, data) => {
   const ref = await addDoc(collection(db, 'orchards', orchardId, 'crops'), {
     nombre: data.nombre,
@@ -351,6 +372,8 @@ export const createTarea = async (orchardId, data) => {
     titulo: data.titulo,
     descripcion: data.descripcion || '',
     cropId: data.cropId || null,
+    // Día previsto (AAAA-MM-DD) o vacío si no tiene fecha.
+    fecha: data.fecha || '',
     frecuenciaRiego: data.frecuenciaRiego || '',
     responsable: data.responsable || '',
     completada: false,

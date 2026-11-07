@@ -1,331 +1,268 @@
 <template>
   <div>
-    <header class="page-head">
+    <header class="cabecera">
       <h1>Biblioteca de cultivos</h1>
-      <p class="sub">Consulta la ficha de cada cultivo y variedad, y añádelo a tus huertos.</p>
+      <p class="sub">
+        {{ CROPS_LIBRARY.length }} hortalizas, aromáticas y frutales de huerto, con su calendario para España.
+      </p>
     </header>
 
-    <input
-      v-model="search"
-      class="search"
-      placeholder="Buscar cultivo o variedad (tomate, raf, padrón…)"
-    />
+    <div class="controles">
+      <div class="busqueda">
+        <Search :size="17" />
+        <input id="bib-buscar" v-model="search" aria-label="Buscar cultivo o variedad" placeholder="Buscar cultivo o variedad: tomate, raf, padrón…" />
+      </div>
+      <button class="este-mes" :class="{ activo: soloEsteMes }" :aria-pressed="soloEsteMes" @click="soloEsteMes = !soloEsteMes">
+        <Sprout :size="16" /> Qué sembrar en {{ MESES_LARGOS[mes - 1] }}
+      </button>
+      <select id="bib-tipo" v-model="tipo" aria-label="Filtrar por tipo">
+        <option value="">Todos los tipos</option>
+        <option v-for="(n, k) in TIPOS" :key="k" :value="k">{{ n }}</option>
+      </select>
+      <select id="bib-familia" v-model="familia" aria-label="Filtrar por familia">
+        <option value="">Todas las familias</option>
+        <option v-for="f in FAMILIAS" :key="f" :value="f">{{ f }}</option>
+      </select>
+      <select id="bib-dificultad" v-model="dificultad" aria-label="Filtrar por dificultad">
+        <option value="">Cualquier dificultad</option>
+        <option v-for="d in DIFICULTADES" :key="d" :value="d">{{ d }}</option>
+      </select>
+    </div>
 
-    <p v-if="!grupos.length" class="muted">No se encontró ningún cultivo.</p>
+    <p class="resumen" aria-live="polite">
+      {{ total }} {{ total === 1 ? 'resultado' : 'resultados' }}
+      <button v-if="hayFiltros" class="limpiar" @click="limpiar">Quitar filtros</button>
+    </p>
 
-    <section v-for="g in grupos" :key="g.cultivo" class="group">
-      <h2 class="group-title">
-        {{ g.cultivo }}
-        <span class="group-count">{{ g.items.length }} {{ g.items.length === 1 ? 'variedad' : 'variedades' }}</span>
+    <div v-if="!grupos.length" class="vacio">
+      <p>Ningún cultivo coincide con estos filtros.</p>
+      <button class="limpiar" @click="limpiar">Quitar filtros</button>
+    </div>
+
+    <section v-for="g in grupos" :key="g.id" class="grupo">
+      <h2>
+        {{ g.nombre }}
+        <span v-if="g.items.length > 1" class="cuenta">{{ g.items.length }} variedades</span>
       </h2>
-      <div class="grid">
-        <button v-for="c in g.items" :key="c.id" class="crop-card" @click="abrir(c)">
-          <div
-            class="thumb"
-            :class="{ photo: c.foto }"
-            :style="c.foto ? { backgroundImage: `url(${c.foto})` } : null"
-          >
-            <Leaf v-if="!c.foto" :size="28" />
+      <div class="rejilla">
+        <router-link v-for="c in g.items" :key="c.id" :to="`/biblioteca/${c.id}`" class="ficha">
+          <img :src="c.foto" :alt="c.nombre" loading="lazy" width="800" height="600" />
+          <div class="datos">
+            <strong>{{ c.variedad || c.nombre }}</strong>
+            <span class="meta">{{ textoCosecha(c) }} · {{ c.dificultad }}</span>
+            <CalendarioCultivo :entrada="c" compacto />
           </div>
-          <div class="body">
-            <h3>{{ c.variedad || c.cultivo }}</h3>
-            <span class="fam">{{ c.familia }}</span>
-            <div class="facts">
-              <span>Temp. ideal: {{ c.tempIdeal }}</span>
-              <span>Cosecha: {{ c.tiempoCosecha }}</span>
-            </div>
-          </div>
-        </button>
+        </router-link>
       </div>
     </section>
-
-    <!-- Ficha + añadir -->
-    <BaseModal v-if="sel" :title="sel.nombre" @close="cerrar">
-      <div
-        class="ficha-head"
-        :class="{ photo: sel.foto }"
-        :style="sel.foto ? { backgroundImage: `url(${sel.foto})` } : null"
-      >
-        <Leaf v-if="!sel.foto" :size="40" />
-      </div>
-      <dl class="ficha">
-        <div><dt>Cultivo</dt><dd>{{ sel.cultivo }}</dd></div>
-        <div v-if="sel.variedad"><dt>Variedad</dt><dd>{{ sel.variedad }}</dd></div>
-        <div><dt>Familia botánica</dt><dd>{{ sel.familia }}</dd></div>
-        <div><dt>Época de siembra</dt><dd>{{ sel.epocaSiembra }}</dd></div>
-        <div><dt>Riego</dt><dd>{{ sel.riego }}</dd></div>
-        <div><dt>Temperatura ideal</dt><dd>{{ sel.tempIdeal }}</dd></div>
-        <div><dt>Plagas comunes</dt><dd>{{ sel.plagas }}</dd></div>
-        <div><dt>Tiempo hasta cosecha</dt><dd>{{ sel.tiempoCosecha }}</dd></div>
-      </dl>
-
-      <div class="add-box">
-        <label>Añadir a mi huerto</label>
-        <p v-if="!huertos.length" class="muted small">
-          Primero crea un huerto desde <router-link to="/dashboard">Mis Huertos</router-link>.
-        </p>
-        <template v-else>
-          <select v-model="destino">
-            <option v-for="h in huertos" :key="h.id" :value="h.id">{{ h.nombre }}</option>
-          </select>
-          <p v-if="addMsg" class="success small">{{ addMsg }}</p>
-        </template>
-      </div>
-
-      <template #footer>
-        <button type="button" class="ghost" @click="cerrar">Cerrar</button>
-        <button
-          class="primary"
-          :disabled="!huertos.length || adding"
-          @click="anadir"
-        >
-          {{ adding ? 'Añadiendo…' : 'Añadir a mi huerto' }}
-        </button>
-      </template>
-    </BaseModal>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { Leaf } from 'lucide-vue-next'
-import { useAuth } from '../composables/useAuth'
-import { useHuertos } from '../composables/useHuertos'
-import BaseModal from '../components/BaseModal.vue'
-import { CROPS_LIBRARY } from '../data/cropsLibrary'
-import { createCultivo } from '../services/firestoreService'
-import { permisosEn } from '../utils/permissions'
+import { computed, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import { Search, Sprout } from 'lucide-vue-next'
+import CalendarioCultivo from '../components/CalendarioCultivo.vue'
+import {
+  CROPS_LIBRARY,
+  DIFICULTADES,
+  FAMILIAS,
+  MESES_LARGOS,
+  TIPOS,
+  buscarBiblioteca,
+  nombreEspecie,
+  sePuedeSembrar,
+  textoCosecha,
+} from '../data/cropsLibrary'
+import { mesActual } from '../utils/fechas'
 
-const { user } = useAuth()
+const route = useRoute()
+const mes = mesActual()
 const search = ref('')
-const { huertos: todos } = useHuertos()
-// Solo se puede añadir a huertos donde tengo permiso para gestionar cultivos.
-const huertos = computed(() => todos.value.filter((h) => permisosEn(h, user.value.uid).manageCrops))
-const sel = ref(null)
-const destino = ref(null)
-const adding = ref(false)
-const addMsg = ref('')
+const tipo = ref('')
+const familia = ref('')
+const dificultad = ref('')
+// Desde "Qué sembrar este mes" del panel se llega con el filtro puesto.
+const soloEsteMes = ref(route.query.mes === '1')
 
-// Entradas filtradas por nombre / cultivo / variedad / familia, agrupadas por
-// cultivo manteniendo el orden del catálogo.
+const filtradas = computed(() =>
+  buscarBiblioteca(search.value).filter(
+    (c) =>
+      (!tipo.value || c.tipo === tipo.value) &&
+      (!familia.value || c.familia === familia.value) &&
+      (!dificultad.value || c.dificultad === dificultad.value) &&
+      (!soloEsteMes.value || sePuedeSembrar(c, mes)),
+  ),
+)
+const total = computed(() => filtradas.value.length)
+const hayFiltros = computed(
+  () => search.value || tipo.value || familia.value || dificultad.value || soloEsteMes.value,
+)
 const grupos = computed(() => {
-  const q = search.value.trim().toLowerCase()
-  const lista = !q
-    ? CROPS_LIBRARY
-    : CROPS_LIBRARY.filter((c) =>
-        [c.nombre, c.cultivo, c.variedad, c.familia].some((v) =>
-          (v || '').toLowerCase().includes(q),
-        ),
-      )
-  const map = new Map()
-  for (const c of lista) {
-    if (!map.has(c.cultivo)) map.set(c.cultivo, [])
-    map.get(c.cultivo).push(c)
+  const mapa = new Map()
+  for (const c of filtradas.value) {
+    if (!mapa.has(c.especieId)) {
+      mapa.set(c.especieId, { id: c.especieId, nombre: nombreEspecie(c.especieId), items: [] })
+    }
+    mapa.get(c.especieId).items.push(c)
   }
-  return [...map.entries()].map(([cultivo, items]) => ({ cultivo, items }))
+  return [...mapa.values()]
 })
 
-function abrir(c) {
-  sel.value = c
-  addMsg.value = ''
-  destino.value = huertos.value[0]?.id || null
-}
-function cerrar() {
-  sel.value = null
-}
-
-async function anadir() {
-  if (!destino.value || !sel.value) return
-  adding.value = true
-  addMsg.value = ''
-  try {
-    const c = sel.value
-    await createCultivo(destino.value, {
-      nombre: c.nombre,
-      especie: c.familia,
-      familia: c.familia,
-      epocaSiembra: c.epocaSiembra,
-      riego: c.riego,
-      tempIdeal: c.tempIdeal,
-      plagas: c.plagas,
-      tiempoCosecha: c.tiempoCosecha,
-      foto: c.foto,
-    })
-    const nombreHuerto = huertos.value.find((h) => h.id === destino.value)?.nombre
-    addMsg.value = `"${c.nombre}" añadido a ${nombreHuerto}.`
-  } catch (e) {
-    addMsg.value = 'No se pudo añadir el cultivo.'
-    console.error(e)
-  } finally {
-    adding.value = false
-  }
+function limpiar() {
+  search.value = ''
+  tipo.value = ''
+  familia.value = ''
+  dificultad.value = ''
+  soloEsteMes.value = false
 }
 </script>
 
 <style scoped>
-.page-head {
-  margin-bottom: 20px;
-}
-.page-head h1 {
+.cabecera h1 {
   margin: 0;
 }
 .sub {
   color: var(--color-text-soft);
-  margin: 4px 0 0;
+  margin: 4px 0 18px;
 }
-.search {
-  width: 100%;
-  max-width: 520px;
-  padding: 12px 14px;
+.controles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: stretch;
+}
+.busqueda {
+  flex: 1 1 280px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  background: var(--color-surface);
   border: 1px solid var(--color-input-border);
   border-radius: var(--radius-sm);
-  margin-bottom: 24px;
-  font-size: 0.95rem;
+  color: var(--color-text-soft);
 }
-.group {
-  margin-bottom: 30px;
+.busqueda input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 10px 0;
+  font-size: 0.94rem;
+  color: var(--color-text);
 }
-.group-title {
+.busqueda input:focus {
+  outline: none;
+}
+.busqueda:focus-within {
+  border-color: var(--color-primary);
+}
+.controles select {
+  padding: 9px 10px;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-size: 0.88rem;
+}
+.este-mes {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  border: 1px solid var(--color-verde);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-verde-oscuro);
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+.este-mes.activo {
+  background: var(--color-verde-oscuro);
+  border-color: var(--color-verde-oscuro);
+  color: #fff;
+}
+.resumen {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 0.86rem;
+  color: var(--color-text-soft);
+  margin: 12px 0 22px;
+}
+.limpiar {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-primary);
+  font-weight: 600;
+  font-size: inherit;
+  cursor: pointer;
+}
+.vacio {
+  padding: 30px 0;
+  color: var(--color-text-soft);
+}
+.grupo {
+  margin-bottom: 34px;
+}
+.grupo h2 {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  margin: 0 0 14px;
-  font-size: 1.25rem;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--color-border-soft);
+  margin: 0 0 12px;
+  font-size: 1.35rem;
 }
-.group-count {
+.cuenta {
+  font-family: var(--font-texto);
   font-size: 0.8rem;
-  font-weight: 500;
+  font-weight: 400;
   color: var(--color-text-soft);
 }
-.grid {
+.rejilla {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 18px 16px;
 }
-.crop-card {
-  text-align: left;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border-soft);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-  overflow: hidden;
-  cursor: pointer;
-  padding: 0;
-  transition: transform 0.15s, box-shadow 0.15s;
-}
-.crop-card:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-hover);
-}
-.thumb {
-  height: 120px;
+.ficha {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
+  flex-direction: column;
+  color: inherit;
+  text-decoration: none;
 }
-.thumb.photo {
-  background-size: cover;
-  background-position: center;
+.ficha img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--color-tierra-suave);
+  transition: filter 0.15s;
 }
-.body {
-  padding: 14px 16px;
+.ficha:hover img {
+  filter: brightness(1.06);
 }
-.body h3 {
-  margin: 0;
-  font-size: 1rem;
+.ficha:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
 }
-.fam {
-  font-size: 0.8rem;
-  color: var(--color-text-soft);
-}
-.facts {
+.datos {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin-top: 8px;
-  font-size: 0.8rem;
-  color: var(--color-text);
+  padding-top: 9px;
 }
-/* Ficha modal */
-.ficha-head {
-  height: 150px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 16px;
-  background: var(--color-primary-soft);
+.datos strong {
+  font-size: 0.98rem;
+}
+.ficha:hover strong {
   color: var(--color-primary);
 }
-.ficha-head.photo {
-  background-size: cover;
-  background-position: center;
-}
-.ficha {
-  margin: 0;
-}
-.ficha > div {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--color-border-soft);
-}
-.ficha dt {
+.meta {
+  font-size: 0.8rem;
   color: var(--color-text-soft);
-  font-size: 0.88rem;
-}
-.ficha dd {
-  margin: 0;
-  font-weight: 600;
-  text-align: right;
-}
-.add-box {
-  margin-top: 18px;
-}
-.add-box label {
-  display: block;
-  font-weight: 700;
-  margin-bottom: 8px;
-}
-.add-box select {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--color-input-border);
-  border-radius: var(--radius-sm);
-}
-.ghost {
-  background: transparent;
-  border: none;
-  color: var(--color-text-soft);
-  font-weight: 600;
-  cursor: pointer;
-  padding: 10px 14px;
-}
-.primary {
-  background: var(--color-primary);
-  color: #fff;
-  border: none;
-  padding: 11px 20px;
-  border-radius: var(--radius-sm);
-  font-weight: 700;
-  cursor: pointer;
-}
-.primary:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-.muted {
-  color: var(--color-text-soft);
-}
-.small {
-  font-size: 0.85rem;
-}
-.success {
-  color: var(--color-success);
+  margin-bottom: 6px;
 }
 </style>

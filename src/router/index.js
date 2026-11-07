@@ -22,6 +22,7 @@ const OrchardTasksView = () => import('../views/OrchardTasksView.vue')
 const GlobalTasksView = () => import('../views/GlobalTasksView.vue')
 const GlobalSensorsView = () => import('../views/GlobalSensorsView.vue')
 const CropDetailView = () => import('../views/CropDetailView.vue')
+const BibliotecaEntradaView = () => import('../views/BibliotecaEntradaView.vue')
 const OrchardMembersView = () => import('../views/OrchardMembersView.vue')
 const InvitationsView = () => import('../views/InvitationsView.vue')
 
@@ -49,6 +50,7 @@ const routes = [
       { path: 'tasks', component: GlobalTasksView },
       { path: 'sensors', component: GlobalSensorsView },
       { path: 'biblioteca', component: BibliotecaView },
+      { path: 'biblioteca/:id', component: BibliotecaEntradaView },
       { path: 'settings', component: SettingsView },
       { path: 'profile', component: ProfileView },
       { path: 'invitations', component: InvitationsView },
