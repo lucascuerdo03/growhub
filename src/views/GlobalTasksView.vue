@@ -11,7 +11,11 @@
         <select v-model="orchardId">
           <option v-for="h in huertosEditables" :key="h.id" :value="h.id">{{ h.nombre }}</option>
         </select>
-        <select v-model="frecuenciaRiego">
+        <select v-model="cropId" aria-label="Planta de la tarea">
+          <option value="">General</option>
+          <option v-for="c in cultivosDe(orchardId)" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+        </select>
+        <select v-model="frecuenciaRiego" aria-label="Frecuencia de riego">
           <option v-for="f in FRECUENCIAS" :key="f" :value="f">{{ f }}</option>
         </select>
         <button type="submit" :disabled="saving || !titulo.trim()">Añadir</button>
@@ -28,9 +32,16 @@
     </template>
     <p v-else-if="!tareas.length" class="muted">No hay tareas todavía.</p>
 
-    <ul v-else class="list">
-      <li v-for="t in tareas" :key="t.orchardId + t.id" :class="{ done: t.completada }">
-        <input type="checkbox" :checked="t.completada" :disabled="!permisosDe(t).completeTasks" @change="toggle(t)" />
+    <template v-else>
+    <select v-if="opcionesPlanta.length" v-model="filtroPlanta" class="task-filter" aria-label="Filtrar por planta">
+      <option value="">Todas las plantas</option>
+      <option value="general">General</option>
+      <option v-for="o in opcionesPlanta" :key="o.valor" :value="o.valor">{{ o.etiqueta }}</option>
+    </select>
+    <p v-if="!tareasFiltradas.length" class="muted">No hay tareas para esta planta.</p>
+    <ul class="list">
+      <li v-for="t in tareasFiltradas" :key="t.orchardId + t.id" :class="{ done: t.completada }">
+        <input type="checkbox" :checked="t.completada" :disabled="!permisosDe(t).completeTasks || t.pendiente" @change="toggle(t)" />
         <div class="info">
           <strong>{{ t.titulo }}</strong>
           <p v-if="t.descripcion" class="desc">{{ t.descripcion }}</p>
@@ -38,27 +49,30 @@
             <router-link :to="`/orchard/${t.orchardId}`" class="tag orchard">
               {{ t.orchardNombre }}
             </router-link>
-            <span v-if="t.cropNombre" class="tag crop">{{ t.cropNombre }}</span>
+            <span class="tag crop">{{ plantaDe(t) }}</span>
             <span v-if="t.frecuenciaRiego" class="tag water">Riego: {{ t.frecuenciaRiego }}</span>
           </div>
         </div>
-        <button v-if="permisosDe(t).manageTasks" class="del" aria-label="Eliminar" @click="remove(t)">✕</button>
+        <button v-if="permisosDe(t).manageTasks && !t.pendiente" class="del" aria-label="Eliminar" @click="remove(t)">✕</button>
       </li>
     </ul>
+    </template>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useAuth } from '../composables/useAuth'
 import { permisosEn, mensajeError } from '../utils/permissions'
+import { insertarOptimista, quitarOptimista } from '../utils/listas'
 import {
   getHuertos,
   getAllTareas,
+  getCultivos,
   createTarea,
   updateTarea,
   deleteTarea,
-  createPost,
+  autopublicarTarea,
 } from '../services/firestoreService'
 
 const FRECUENCIAS = ['Sin riego', 'Diario', 'Cada 2-3 días', 'Semanal', 'Solo en sequía']
@@ -66,6 +80,9 @@ const FRECUENCIAS = ['Sin riego', 'Diario', 'Cada 2-3 días', 'Semanal', 'Solo e
 const { user } = useAuth()
 const huertos = ref([])
 const tareas = ref([])
+const cultivos = ref({}) // orchardId -> [cultivos]
+const cropId = ref('')
+const filtroPlanta = ref('')
 const titulo = ref('')
 const orchardId = ref(null)
 const frecuenciaRiego = ref('Cada 2-3 días')
@@ -76,6 +93,25 @@ const error = ref('')
 const huertosEditables = computed(() =>
   huertos.value.filter((h) => permisosEn(h, user.value.uid).manageTasks),
 )
+const cultivosDe = (id) => cultivos.value[id] || []
+const cultivoDe = (t) => cultivosDe(t.orchardId).find((c) => c.id === t.cropId)
+const plantaDe = (t) => cultivoDe(t)?.nombre || 'General'
+const opcionesPlanta = computed(() =>
+  huertos.value.flatMap((h) =>
+    cultivosDe(h.id).map((c) => ({
+      valor: `${h.id}/${c.id}`,
+      etiqueta: `${c.nombre} · ${h.nombre}`,
+    })),
+  ),
+)
+const tareasFiltradas = computed(() => {
+  if (!filtroPlanta.value) return tareas.value
+  if (filtroPlanta.value === 'general') return tareas.value.filter((t) => !cultivoDe(t))
+  return tareas.value.filter((t) => `${t.orchardId}/${t.cropId}` === filtroPlanta.value)
+})
+// Las plantas elegibles dependen del huerto seleccionado.
+watch(orchardId, () => (cropId.value = ''))
+
 const permisosDe = (t) =>
   permisosEn(huertos.value.find((h) => h.id === t.orchardId), user.value.uid)
 
@@ -85,7 +121,12 @@ async function load() {
   try {
     huertos.value = await getHuertos(user.value.uid)
     if (huertosEditables.value.length && !orchardId.value) orchardId.value = huertosEditables.value[0].id
-    tareas.value = await getAllTareas(user.value.uid)
+    const [listas, todas] = await Promise.all([
+      Promise.all(huertos.value.map((h) => getCultivos(h.id))),
+      getAllTareas(huertos.value),
+    ])
+    cultivos.value = Object.fromEntries(huertos.value.map((h, i) => [h.id, listas[i]]))
+    tareas.value = todas
   } catch (e) {
     error.value = 'No se pudieron cargar las tareas.'
     console.error(e)
@@ -102,20 +143,18 @@ async function add() {
   const datos = {
     titulo: titulo.value.trim(),
     frecuenciaRiego: frecuenciaRiego.value,
+    cropId: cropId.value || null,
   }
+  const h = huertos.value.find((x) => x.id === destino)
+  titulo.value = ''
   try {
-    const id = await createTarea(destino, datos)
-    // Aparece al instante en la lista, sin recargar la página.
-    const h = huertos.value.find((x) => x.id === destino)
-    tareas.value.unshift({
-      id,
-      completada: false,
-      orchardId: destino,
-      orchardNombre: h?.nombre || '',
-      ...datos,
-    })
-    titulo.value = ''
+    await insertarOptimista(
+      tareas,
+      { ...datos, completada: false, orchardId: destino, orchardNombre: h?.nombre || '' },
+      () => createTarea(destino, datos),
+    )
   } catch (e) {
+    titulo.value = datos.titulo
     error.value = mensajeError(e, 'No se pudo crear la tarea.')
     console.error(e)
   } finally {
@@ -136,24 +175,15 @@ async function toggle(t) {
   }
   // Al completar, se autopublica en el cuaderno del huerto (no es crítico).
   if (nuevo && permisosDe(t).publishPosts) {
-    try {
-      await createPost(t.orchardId, {
-        texto: `He completado la tarea: ${t.titulo}`,
-        autorId: user.value.uid,
-        autorNombre: user.value.displayName || user.value.email,
-        autorFoto: user.value.photoURL || '',
-      })
-    } catch (e) {
-      console.warn('No se pudo autopublicar en el cuaderno:', e)
-    }
+    await autopublicarTarea(t.orchardId, t.titulo, user.value)
   }
 }
 
 async function remove(t) {
   if (!confirm('¿Eliminar esta tarea?')) return
+  error.value = ''
   try {
-    await deleteTarea(t.orchardId, t.id)
-    tareas.value = tareas.value.filter((x) => !(x.orchardId === t.orchardId && x.id === t.id))
+    await quitarOptimista(tareas, t, () => deleteTarea(t.orchardId, t.id))
   } catch (e) {
     error.value = mensajeError(e, 'No se pudo eliminar la tarea.')
     console.error(e)
@@ -209,6 +239,15 @@ onMounted(load)
 .task-form button:disabled {
   opacity: 0.6;
   cursor: default;
+}
+.task-filter {
+  display: block;
+  width: 100%;
+  max-width: 340px;
+  padding: 9px 11px;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 14px;
 }
 .list {
   list-style: none;

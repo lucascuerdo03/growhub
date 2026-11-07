@@ -60,6 +60,37 @@
         </form>
       </section>
 
+      <!-- Tareas de la planta -->
+      <section class="card">
+        <h2 class="section-title">Tareas del cultivo</h2>
+
+        <form v-if="permisos.manageTasks" class="link-row" @submit.prevent="addTask">
+          <input v-model="taskTitulo" class="task-input" placeholder="Nueva tarea para esta planta" />
+          <select v-model="taskFrec" aria-label="Frecuencia de riego">
+            <option v-for="f in FRECUENCIAS" :key="f" :value="f">{{ f }}</option>
+          </select>
+          <button type="submit" class="primary" :disabled="!taskTitulo.trim()">Añadir tarea</button>
+        </form>
+
+        <p v-if="taskError" class="error">{{ taskError }}</p>
+        <p v-if="!tareas.length" class="muted small">Este cultivo aún no tiene tareas.</p>
+
+        <div v-for="t in tareas" :key="t.id" class="task" :class="{ done: t.completada }">
+          <input
+            type="checkbox"
+            :checked="t.completada"
+            :disabled="!permisos.completeTasks || t.pendiente"
+            :aria-label="`Completar ${t.titulo}`"
+            @change="toggleTask(t)"
+          />
+          <div class="task-info">
+            <strong>{{ t.titulo }}</strong>
+            <span v-if="t.frecuenciaRiego" class="muted small">Riego: {{ t.frecuenciaRiego }}</span>
+          </div>
+          <button v-if="permisos.manageTasks && !t.pendiente" class="unlink" aria-label="Eliminar" @click="removeTask(t)">✕</button>
+        </div>
+      </section>
+
       <!-- Sensores vinculados -->
       <section class="card">
         <h2 class="section-title">Sensores del cultivo</h2>
@@ -113,16 +144,24 @@ import StoredImage from '../components/StoredImage.vue'
 import { SENSOR_TYPES } from '../utils/sensorTypes'
 import { useAuth } from '../composables/useAuth'
 import { permisosEn, mensajeError } from '../utils/permissions'
+import { insertarOptimista, quitarOptimista } from '../utils/listas'
 import {
   getHuerto,
   getCultivo,
   updateCultivo,
+  getTareas,
+  createTarea,
+  updateTarea,
+  deleteTarea,
+  autopublicarTarea,
   getSensores,
   updateSensor,
   getLecturas,
   resolverFoto,
   limpiarFoto,
 } from '../services/firestoreService'
+
+const FRECUENCIAS = ['Sin riego', 'Diario', 'Cada 2-3 días', 'Semanal', 'Solo en sequía']
 
 const route = useRoute()
 const orchardId = route.params.id
@@ -138,6 +177,10 @@ const editing = ref(false)
 const saving = ref(false)
 const savedMsg = ref('')
 const sensorAVincular = ref(null)
+const tareas = ref([])
+const taskTitulo = ref('')
+const taskFrec = ref('Cada 2-3 días')
+const taskError = ref('')
 
 const fNombre = ref('')
 const fEspecie = ref('')
@@ -169,7 +212,8 @@ async function load() {
       fFecha.value = cultivo.value.fechaSiembra || ''
       fDesc.value = cultivo.value.descripcion || ''
     }
-    await cargarSensores()
+    const [todas] = await Promise.all([getTareas(orchardId), cargarSensores()])
+    tareas.value = todas.filter((t) => t.cropId === cropId)
   } catch (e) {
     console.error(e)
   } finally {
@@ -203,6 +247,51 @@ async function guardar() {
     console.error(e)
   } finally {
     saving.value = false
+  }
+}
+
+async function addTask() {
+  const titulo = taskTitulo.value.trim()
+  if (!titulo) return
+  const datos = { titulo, frecuenciaRiego: taskFrec.value, cropId }
+  taskError.value = ''
+  taskTitulo.value = ''
+  try {
+    await insertarOptimista(tareas, { ...datos, completada: false }, () =>
+      createTarea(orchardId, datos),
+    )
+  } catch (e) {
+    taskTitulo.value = titulo
+    taskError.value = mensajeError(e, 'No se pudo crear la tarea.')
+    console.error(e)
+  }
+}
+
+async function toggleTask(t) {
+  const nuevo = !t.completada
+  t.completada = nuevo
+  taskError.value = ''
+  try {
+    await updateTarea(orchardId, t.id, { completada: nuevo })
+  } catch (e) {
+    t.completada = !nuevo
+    taskError.value = mensajeError(e, 'No se pudo actualizar la tarea.')
+    console.error(e)
+    return
+  }
+  if (nuevo && permisos.value.publishPosts) {
+    await autopublicarTarea(orchardId, t.titulo, user.value)
+  }
+}
+
+async function removeTask(t) {
+  if (!confirm('¿Eliminar esta tarea?')) return
+  taskError.value = ''
+  try {
+    await quitarOptimista(tareas, t, () => deleteTarea(orchardId, t.id))
+  } catch (e) {
+    taskError.value = mensajeError(e, 'No se pudo eliminar la tarea.')
+    console.error(e)
   }
 }
 
@@ -355,6 +444,39 @@ onMounted(load)
   padding: 10px 12px;
   border: 1px solid var(--color-input-border);
   border-radius: var(--radius-sm);
+}
+.link-row .task-input {
+  flex: 1;
+  min-width: 180px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-sm);
+}
+.link-row select[aria-label='Frecuencia de riego'] {
+  flex: 0 1 180px;
+  min-width: 140px;
+}
+.task {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 12px 0;
+  border-top: 1px solid var(--color-border-soft);
+}
+.task input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  cursor: pointer;
+}
+.task-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.task.done strong {
+  text-decoration: line-through;
+  color: #9ca3af;
 }
 .primary {
   background: var(--color-primary);

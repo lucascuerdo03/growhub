@@ -311,7 +311,9 @@ export const getLecturas = async (orchardId, sensorId, max = 30) => {
 
 /* ------------------------------ Tareas ----------------------------- */
 // Tareas como subcolección del huerto: orchards/{id}/tasks
-// Pueden asociarse a un cultivo (cropId) o ser generales del huerto.
+// cropId las asocia a un cultivo; sin él son tareas generales del huerto. El
+// nombre de la planta se busca siempre por cropId, así que renombrar un cultivo
+// no deja etiquetas viejas y una tarea de un cultivo borrado pasa a ser general.
 
 export const getTareas = async (orchardId) => {
   const q = query(
@@ -327,7 +329,6 @@ export const createTarea = async (orchardId, data) => {
     titulo: data.titulo,
     descripcion: data.descripcion || '',
     cropId: data.cropId || null,
-    cropNombre: data.cropNombre || '',
     frecuenciaRiego: data.frecuenciaRiego || '',
     responsable: data.responsable || '',
     completada: false,
@@ -363,6 +364,24 @@ export const createPost = (orchardId, { texto, autorId, autorNombre, autorFoto =
     fotoId,
     createdAt: serverTimestamp(),
   })
+
+// Entrada automática al completar una tarea. No es crítica: si falla, la tarea
+// sigue completada. Devuelve la publicación para añadirla al feed, o null.
+export const autopublicarTarea = async (orchardId, titulo, user) => {
+  const datos = {
+    texto: `He completado la tarea: ${titulo}`,
+    autorId: user.uid,
+    autorNombre: user.displayName || user.email,
+    autorFoto: user.photoURL || '',
+  }
+  try {
+    const { id } = await createPost(orchardId, datos)
+    return { id, ...datos, createdAt: { toDate: () => new Date() } }
+  } catch (e) {
+    console.warn('No se pudo autopublicar en el cuaderno:', e)
+    return null
+  }
+}
 
 export const deletePost = async (orchardId, postId, fotoId = '') => {
   await deleteDoc(doc(db, 'orchards', orchardId, 'posts', postId))
@@ -420,8 +439,7 @@ export const limpiarFoto = async (orchardId, anteriorId, nuevoId) => {
 // Datos de TODOS los huertos del usuario, para las secciones globales
 // (Tareas / Sensores) accesibles sin entrar en un huerto concreto.
 
-export const getAllTareas = async (uid) => {
-  const huertos = await getHuertos(uid)
+export const getAllTareas = async (huertos) => {
   const listas = await Promise.all(
     huertos.map(async (h) => {
       const tareas = await getTareas(h.id)
@@ -431,8 +449,7 @@ export const getAllTareas = async (uid) => {
   return listas.flat()
 }
 
-export const getAllSensores = async (uid) => {
-  const huertos = await getHuertos(uid)
+export const getAllSensores = async (huertos) => {
   const listas = await Promise.all(
     huertos.map(async (h) => {
       const sensores = await getSensores(h.id)

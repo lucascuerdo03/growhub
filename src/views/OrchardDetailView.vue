@@ -63,23 +63,34 @@
 
         <form v-if="permisos.manageTasks" class="inline-add" @submit.prevent="addTask">
           <input v-model="taskTitulo" placeholder="Nueva tarea" />
-          <select v-model="taskFrec">
+          <select v-model="taskFrec" aria-label="Frecuencia de riego">
             <option v-for="f in FRECUENCIAS" :key="f" :value="f">{{ f }}</option>
+          </select>
+          <select v-model="taskCrop" aria-label="Planta de la tarea">
+            <option value="">General</option>
+            <option v-for="c in cultivos" :key="c.id" :value="c.id" :disabled="c.pendiente">{{ c.nombre }}</option>
           </select>
           <button type="submit" :disabled="!taskTitulo.trim()"><Plus :size="18" /></button>
         </form>
 
+        <select v-if="cultivos.length" v-model="filtroPlanta" class="task-filter" aria-label="Filtrar por planta">
+          <option value="">Todas las plantas</option>
+          <option value="general">General</option>
+          <option v-for="c in cultivos" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+        </select>
+
         <p class="group-label">Pendientes</p>
         <p v-if="!pendientes.length" class="muted small">No hay tareas pendientes.</p>
         <div v-for="t in pendientes" :key="t.id" class="task-card">
-          <input type="checkbox" :checked="t.completada" :disabled="!permisos.completeTasks" @change="toggleTask(t)" />
+          <input type="checkbox" :checked="t.completada" :disabled="!permisos.completeTasks || t.pendiente" @change="toggleTask(t)" />
           <div class="task-info">
             <strong>{{ t.titulo }}</strong>
-            <div v-if="t.frecuenciaRiego" class="tags">
-              <span class="pill water">Riego: {{ t.frecuenciaRiego }}</span>
+            <div class="tags">
+              <span class="pill plant">{{ plantaDe(t) }}</span>
+              <span v-if="t.frecuenciaRiego" class="pill water">Riego: {{ t.frecuenciaRiego }}</span>
             </div>
           </div>
-          <button v-if="permisos.manageTasks" class="del" @click="removeTask(t)"><X :size="15" /></button>
+          <button v-if="permisos.manageTasks && !t.pendiente" class="del" title="Eliminar" @click="removeTask(t)"><X :size="15" /></button>
         </div>
 
         <button v-if="completadas.length" class="collapse" @click="showDone = !showDone">
@@ -88,7 +99,10 @@
         <template v-if="showDone">
           <div v-for="t in completadas" :key="t.id" class="task-card done">
             <input type="checkbox" checked :disabled="!permisos.completeTasks" @change="toggleTask(t)" />
-            <div class="task-info"><strong>{{ t.titulo }}</strong></div>
+            <div class="task-info">
+              <strong>{{ t.titulo }}</strong>
+              <div class="tags"><span class="pill plant">{{ plantaDe(t) }}</span></div>
+            </div>
             <button v-if="permisos.manageTasks" class="del" @click="removeTask(t)"><X :size="15" /></button>
           </div>
         </template>
@@ -142,6 +156,7 @@ import { useAuth } from '../composables/useAuth'
 import ImageUpload from '../components/ImageUpload.vue'
 import StoredImage from '../components/StoredImage.vue'
 import { nombreRol, permisosEn, mensajeError } from '../utils/permissions'
+import { insertarOptimista, quitarOptimista } from '../utils/listas'
 import {
   getHuerto,
   getCultivos,
@@ -154,6 +169,7 @@ import {
   getPosts,
   createPost,
   deletePost,
+  autopublicarTarea,
   createFoto,
   limpiarFoto,
 } from '../services/firestoreService'
@@ -178,6 +194,8 @@ const cropFoto = ref('')
 const guardandoCultivo = ref(false)
 const taskTitulo = ref('')
 const taskFrec = ref('Cada 2-3 días')
+const taskCrop = ref('')
+const filtroPlanta = ref('')
 const showDone = ref(false)
 const nuevoPost = ref('')
 const postFoto = ref('')
@@ -197,8 +215,15 @@ const cultivosFiltrados = computed(() => {
     (c) => c.nombre.toLowerCase().includes(q) || (c.especie || '').toLowerCase().includes(q),
   )
 })
-const pendientes = computed(() => tareas.value.filter((t) => !t.completada))
-const completadas = computed(() => tareas.value.filter((t) => t.completada))
+const cultivoDe = (t) => cultivos.value.find((c) => c.id === t.cropId)
+const plantaDe = (t) => cultivoDe(t)?.nombre || 'General'
+const tareasFiltradas = computed(() => {
+  if (!filtroPlanta.value) return tareas.value
+  if (filtroPlanta.value === 'general') return tareas.value.filter((t) => !cultivoDe(t))
+  return tareas.value.filter((t) => t.cropId === filtroPlanta.value)
+})
+const pendientes = computed(() => tareasFiltradas.value.filter((t) => !t.completada))
+const completadas = computed(() => tareasFiltradas.value.filter((t) => t.completada))
 
 function fecha(ts) {
   const d = ts?.toDate ? ts.toDate() : new Date()
@@ -269,9 +294,9 @@ async function addCrop() {
 
 async function removeCrop(c) {
   if (!confirm('¿Eliminar este cultivo?')) return
+  error.value = ''
   try {
-    await deleteCultivo(orchardId, c.id, c.fotoId)
-    cultivos.value = cultivos.value.filter((x) => x.id !== c.id)
+    await quitarOptimista(cultivos, c, () => deleteCultivo(orchardId, c.id, c.fotoId))
   } catch (e) {
     error.value = mensajeError(e, 'No se pudo eliminar el cultivo.')
     console.error(e)
@@ -280,16 +305,16 @@ async function removeCrop(c) {
 
 async function addTask() {
   if (!taskTitulo.value.trim()) return
-  const datos = {
-    titulo: taskTitulo.value.trim(),
-    frecuenciaRiego: taskFrec.value,
-  }
+  const titulo = taskTitulo.value.trim()
+  const datos = { titulo, frecuenciaRiego: taskFrec.value, cropId: taskCrop.value || null }
+  error.value = ''
+  taskTitulo.value = ''
   try {
-    const id = await createTarea(orchardId, datos)
-    // Aparece al instante en "Pendientes", sin recargar.
-    tareas.value.unshift({ id, completada: false, ...datos })
-    taskTitulo.value = ''
+    await insertarOptimista(tareas, { ...datos, completada: false }, () =>
+      createTarea(orchardId, datos),
+    )
   } catch (e) {
+    taskTitulo.value = titulo
     error.value = mensajeError(e, 'No se pudo crear la tarea.')
     console.error(e)
   }
@@ -310,28 +335,16 @@ async function toggleTask(t) {
   // falla (p. ej. reglas de posts no publicadas) NO revertimos la tarea: ya
   // quedó completada correctamente.
   if (nuevo && permisos.value.publishPosts) {
-    try {
-      const { id } = await createPost(orchardId, {
-        texto: `He completado la tarea: ${t.titulo}`,
-        ...autorInfo(),
-      })
-      posts.value.unshift({
-        id,
-        texto: `He completado la tarea: ${t.titulo}`,
-        createdAt: { toDate: () => new Date() },
-        ...autorInfo(),
-      })
-    } catch (e) {
-      console.warn('No se pudo autopublicar en el cuaderno:', e)
-    }
+    const post = await autopublicarTarea(orchardId, t.titulo, user.value)
+    if (post) posts.value.unshift(post)
   }
 }
 
 async function removeTask(t) {
   if (!confirm('¿Eliminar esta tarea?')) return
+  error.value = ''
   try {
-    await deleteTarea(orchardId, t.id)
-    tareas.value = tareas.value.filter((x) => x.id !== t.id)
+    await quitarOptimista(tareas, t, () => deleteTarea(orchardId, t.id))
   } catch (e) {
     error.value = mensajeError(e, 'No se pudo eliminar la tarea.')
     console.error(e)
@@ -544,6 +557,18 @@ onMounted(load)
   background: #ede9fe;
   color: #6d28d9;
 }
+.pill.plant {
+  background: #eef2f7;
+  color: #475569;
+}
+.task-filter {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  margin-bottom: 8px;
+}
 .pill.water {
   background: var(--color-primary-soft);
   color: #0369a1;
@@ -608,7 +633,13 @@ onMounted(load)
   min-width: 0;
 }
 .tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   margin-top: 4px;
+}
+.tags .pill {
+  margin-top: 0;
 }
 .collapse {
   width: 100%;

@@ -92,7 +92,7 @@ async function load() {
   error.value = ''
   try {
     huertos.value = await getHuertos(user.value.uid)
-    sensores.value = await getAllSensores(user.value.uid)
+    sensores.value = await getAllSensores(huertos.value)
   } catch (e) {
     error.value = 'No se pudieron cargar los sensores.'
     console.error(e)
