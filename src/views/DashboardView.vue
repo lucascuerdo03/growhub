@@ -41,8 +41,10 @@
 
       <div v-else class="grid">
         <div v-for="h in huertos" :key="h.id" class="card">
-          <div class="card-media" :style="mediaStyle(h)">
-            <Sprout v-if="!h.imagen" :size="30" class="media-ic" />
+          <div class="card-media">
+            <StoredImage class="card-img" :orchard-id="h.id" :foto-id="h.fotoId" :url="h.imagen" :alt="h.nombre">
+              <Sprout :size="30" class="media-ic" />
+            </StoredImage>
             <button class="del" title="Eliminar" @click="remove(h.id)"><X :size="15" /></button>
           </div>
           <div class="card-body">
@@ -71,9 +73,8 @@
         <label>Ubicación</label>
         <input v-model="descripcion" placeholder="Ej: Finca Sur, Salamanca" />
 
-        <label>Foto (URL, opcional)</label>
-        <input v-model="imagen" placeholder="https://…/foto.jpg" />
-        <div v-if="imagen" class="preview" :style="{ backgroundImage: `url(${imagen})` }"></div>
+        <label>Foto (opcional)</label>
+        <ImageUpload v-model="foto" />
 
         <label>Ubicación en el mapa (opcional)</label>
         <p class="hint">Haz clic en el mapa para marcar la ubicación exacta.</p>
@@ -98,8 +99,16 @@ import { ref, computed, onMounted, defineAsyncComponent } from 'vue'
 import { Plus, Sprout, Leaf, ListChecks, X } from 'lucide-vue-next'
 import { useAuth } from '../composables/useAuth'
 import BaseModal from '../components/BaseModal.vue'
+import ImageUpload from '../components/ImageUpload.vue'
+import StoredImage from '../components/StoredImage.vue'
 const LocationMap = defineAsyncComponent(() => import('../components/LocationMap.vue'))
-import { getResumen, createHuerto, deleteHuerto } from '../services/firestoreService'
+import {
+  getResumen,
+  createHuerto,
+  updateHuerto,
+  deleteHuerto,
+  createFoto,
+} from '../services/firestoreService'
 
 const { user } = useAuth()
 const huertos = ref([])
@@ -110,7 +119,7 @@ const error = ref('')
 const showModal = ref(false)
 const nombre = ref('')
 const descripcion = ref('')
-const imagen = ref('')
+const foto = ref('')
 const lat = ref(null)
 const lng = ref(null)
 const saving = ref(false)
@@ -120,11 +129,6 @@ const nombreCorto = computed(() => {
   const n = user.value?.displayName || user.value?.email || 'usuario'
   return n.split(' ')[0].split('@')[0]
 })
-
-function mediaStyle(h) {
-  if (h.imagen) return { backgroundImage: `url(${h.imagen})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-  return { background: '#eef4fb' }
-}
 
 function onPick({ lat: la, lng: ln }) {
   lat.value = la
@@ -137,7 +141,7 @@ function closeModal() {
   showModal.value = false
   nombre.value = ''
   descripcion.value = ''
-  imagen.value = ''
+  foto.value = ''
   lat.value = null
   lng.value = null
   modalError.value = ''
@@ -162,22 +166,35 @@ async function add() {
   if (!nombre.value.trim()) return
   saving.value = true
   modalError.value = ''
+  const fotoNueva = foto.value
+  let id
   try {
-    await createHuerto(user.value.uid, {
+    id = await createHuerto(user.value.uid, {
       nombre: nombre.value.trim(),
       descripcion: descripcion.value.trim(),
-      imagen: imagen.value.trim(),
       lat: lat.value,
       lng: lng.value,
     })
-    closeModal()
-    await load()
   } catch (e) {
     modalError.value = 'No se pudo crear el huerto: ' + (e?.message || 'error desconocido')
     console.error(e)
-  } finally {
     saving.value = false
+    return
   }
+  closeModal()
+  // La foto vive en una subcolección del huerto, así que va después de crearlo.
+  let errorFoto = ''
+  if (fotoNueva) {
+    try {
+      await updateHuerto(id, { fotoId: await createFoto(id, fotoNueva) })
+    } catch (e) {
+      errorFoto = 'El huerto se ha creado, pero no se pudo guardar la foto.'
+      console.error(e)
+    }
+  }
+  await load()
+  error.value = errorFoto
+  saving.value = false
 }
 
 async function remove(id) {
@@ -272,10 +289,12 @@ onMounted(load)
 .card-media {
   position: relative;
   height: 110px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: #eef4fb;
   color: var(--color-primary);
+}
+.card-img {
+  width: 100%;
+  height: 100%;
 }
 .media-ic {
   opacity: 0.6;
@@ -421,14 +440,6 @@ input:focus {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px var(--color-primary-soft);
-}
-.preview {
-  height: 120px;
-  border-radius: var(--radius-sm);
-  background-size: cover;
-  background-position: center;
-  margin-top: 8px;
-  border: 1px solid var(--color-border);
 }
 .hint {
   font-size: 0.82rem;

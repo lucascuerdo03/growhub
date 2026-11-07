@@ -8,10 +8,9 @@
     <template v-else>
       <!-- Ficha -->
       <section class="card ficha">
-        <div class="thumb" :class="{ photo: cultivo.foto }"
-             :style="cultivo.foto ? { backgroundImage: `url(${cultivo.foto})` } : null">
-          <Leaf v-if="!cultivo.foto" :size="46" />
-        </div>
+        <StoredImage class="thumb" :orchard-id="orchardId" :foto-id="cultivo.fotoId" :url="cultivo.foto" :alt="cultivo.nombre">
+          <Leaf :size="46" />
+        </StoredImage>
         <div class="ficha-body">
           <div class="ficha-head">
             <h1>{{ cultivo.nombre }}</h1>
@@ -44,8 +43,14 @@
           <input v-model="fEspecie" />
           <label>Fecha de siembra</label>
           <input v-model="fFecha" type="date" />
-          <label>Foto (URL)</label>
-          <input v-model="fFoto" placeholder="https://…/foto.jpg" />
+          <label>Foto</label>
+          <ImageUpload
+            v-model="fFoto"
+            v-model:removed="fFotoQuitada"
+            :orchard-id="orchardId"
+            :foto-id="cultivo.fotoId"
+            :url="cultivo.foto"
+          />
           <label>Descripción</label>
           <textarea v-model="fDesc" rows="3"></textarea>
           <p v-if="savedMsg" class="success">{{ savedMsg }}</p>
@@ -103,6 +108,8 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { Leaf } from 'lucide-vue-next'
 import SensorChart from '../components/SensorChart.vue'
+import ImageUpload from '../components/ImageUpload.vue'
+import StoredImage from '../components/StoredImage.vue'
 import { SENSOR_TYPES } from '../utils/sensorTypes'
 import {
   getCultivo,
@@ -110,6 +117,8 @@ import {
   getSensores,
   updateSensor,
   getLecturas,
+  resolverFoto,
+  limpiarFoto,
 } from '../services/firestoreService'
 
 const route = useRoute()
@@ -128,6 +137,7 @@ const fNombre = ref('')
 const fEspecie = ref('')
 const fFecha = ref('')
 const fFoto = ref('')
+const fFotoQuitada = ref(false)
 const fDesc = ref('')
 
 const sensoresCultivo = computed(() => sensores.value.filter((s) => s.cropId === cropId))
@@ -148,7 +158,6 @@ async function load() {
       fNombre.value = cultivo.value.nombre || ''
       fEspecie.value = cultivo.value.especie || ''
       fFecha.value = cultivo.value.fechaSiembra || ''
-      fFoto.value = cultivo.value.foto || ''
       fDesc.value = cultivo.value.descripcion || ''
     }
     await cargarSensores()
@@ -163,15 +172,22 @@ async function guardar() {
   saving.value = true
   savedMsg.value = ''
   try {
+    const anterior = cultivo.value.fotoId || ''
+    const fotoId = await resolverFoto(orchardId, anterior, fFoto.value, fFotoQuitada.value)
     const data = {
       nombre: fNombre.value.trim(),
       especie: fEspecie.value.trim(),
       fechaSiembra: fFecha.value,
-      foto: fFoto.value.trim(),
+      fotoId,
+      // Una foto nueva o quitada sustituye también a la URL antigua, si la había.
+      foto: fFoto.value || fFotoQuitada.value ? '' : cultivo.value.foto || '',
       descripcion: fDesc.value.trim(),
     }
     await updateCultivo(orchardId, cropId, data)
     cultivo.value = { ...cultivo.value, ...data }
+    fFoto.value = ''
+    fFotoQuitada.value = false
+    await limpiarFoto(orchardId, anterior, fotoId)
     savedMsg.value = 'Cambios guardados.'
   } catch (e) {
     savedMsg.value = 'No se pudo guardar.'
@@ -231,15 +247,7 @@ onMounted(load)
   height: 150px;
   border-radius: var(--radius-md);
   background: #e8f3ea;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 4rem;
   flex-shrink: 0;
-}
-.thumb.photo {
-  background-size: cover;
-  background-position: center;
 }
 .ficha-body {
   flex: 1;

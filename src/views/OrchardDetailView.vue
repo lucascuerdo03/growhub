@@ -3,7 +3,8 @@
     <router-link to="/dashboard" class="back">← Mis Huertos</router-link>
 
     <!-- Banner hero -->
-    <section class="hero" :style="heroStyle">
+    <section class="hero">
+      <StoredImage v-if="huerto?.fotoId || huerto?.imagen" class="hero-img" :orchard-id="orchardId" :foto-id="huerto.fotoId" :url="huerto.imagen" />
       <div class="hero-overlay">
         <h1>{{ huerto?.nombre || 'Huerto' }}</h1>
         <p v-if="huerto?.descripcion" class="hero-loc">{{ huerto.descripcion }}</p>
@@ -27,8 +28,8 @@
         <form class="inline-add" @submit.prevent="addCrop">
           <input v-model="cropNombre" placeholder="Nuevo cultivo" />
           <input v-model="cropEspecie" placeholder="Especie (opcional)" />
-          <input v-model="cropFoto" placeholder="Foto URL (opcional)" />
-          <button type="submit" :disabled="!cropNombre.trim()">+</button>
+          <button type="submit" :disabled="!cropNombre.trim() || guardandoCultivo">+</button>
+          <ImageUpload v-model="cropFoto" class="inline-photo" />
         </form>
 
         <p v-if="!cultivosFiltrados.length" class="muted small">
@@ -36,13 +37,9 @@
         </p>
 
         <div v-for="c in cultivosFiltrados" :key="c.id" class="crop-card">
-          <div
-            class="crop-thumb"
-            :class="{ photo: c.foto }"
-            :style="c.foto ? { backgroundImage: `url(${c.foto})` } : null"
-          >
-            <Leaf v-if="!c.foto" :size="20" />
-          </div>
+          <StoredImage class="crop-thumb" :orchard-id="orchardId" :foto-id="c.fotoId" :url="c.foto" :alt="c.nombre">
+            <Leaf :size="20" />
+          </StoredImage>
           <router-link :to="`/orchard/${orchardId}/crop/${c.id}`" class="crop-info">
             <strong>{{ c.nombre }}</strong>
             <span v-if="c.especie" class="pill type">{{ c.especie }}</span>
@@ -54,7 +51,7 @@
           <router-link :to="`/orchard/${orchardId}/crop/${c.id}`" class="chevron" title="Ver ficha">
             <ChevronRight :size="20" />
           </router-link>
-          <button class="del" title="Eliminar" @click="removeCrop(c.id)"><X :size="15" /></button>
+          <button class="del" title="Eliminar" @click="removeCrop(c)"><X :size="15" /></button>
         </div>
       </section>
 
@@ -104,7 +101,7 @@
         <span class="avatar">{{ inicial }}</span>
         <div class="composer-body">
           <textarea v-model="nuevoPost" rows="2" placeholder="¿Qué está pasando en el huerto?"></textarea>
-          <input v-model="postFoto" class="post-foto-input" placeholder="Foto (URL, opcional)" />
+          <ImageUpload v-model="postFoto" class="post-foto-input" />
           <div class="composer-foot">
             <button type="submit" class="publish" :disabled="publicando || !nuevoPost.trim()">
               Publicar
@@ -129,7 +126,7 @@
           <button v-if="p.autorId === user?.uid" class="del" @click="removePost(p)"><X :size="15" /></button>
         </header>
         <p class="post-text">{{ p.texto }}</p>
-        <img v-if="p.foto" :src="p.foto" alt="" class="post-img" />
+        <StoredImage v-if="p.fotoId || p.foto" class="post-img" :orchard-id="orchardId" :foto-id="p.fotoId" :url="p.foto" />
       </article>
     </section>
   </div>
@@ -140,6 +137,8 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { X, ChevronRight, Leaf, Plus, MessageSquare } from 'lucide-vue-next'
 import { useAuth } from '../composables/useAuth'
+import ImageUpload from '../components/ImageUpload.vue'
+import StoredImage from '../components/StoredImage.vue'
 import {
   getHuerto,
   getCultivos,
@@ -152,6 +151,8 @@ import {
   getPosts,
   createPost,
   deletePost,
+  createFoto,
+  limpiarFoto,
 } from '../services/firestoreService'
 
 const FRECUENCIAS = ['Sin riego', 'Diario', 'Cada 2-3 días', 'Semanal', 'Solo en sequía']
@@ -171,6 +172,7 @@ const search = ref('')
 const cropNombre = ref('')
 const cropEspecie = ref('')
 const cropFoto = ref('')
+const guardandoCultivo = ref(false)
 const taskTitulo = ref('')
 const taskFrec = ref('Cada 2-3 días')
 const showDone = ref(false)
@@ -180,9 +182,6 @@ const publicando = ref(false)
 
 const inicial = computed(() =>
   (user.value?.displayName || user.value?.email || '?').charAt(0).toUpperCase(),
-)
-const heroStyle = computed(() =>
-  huerto.value?.imagen ? { backgroundImage: `url(${huerto.value.imagen})` } : {},
 )
 const cultivosFiltrados = computed(() => {
   const q = search.value.trim().toLowerCase()
@@ -235,12 +234,16 @@ async function load() {
 
 async function addCrop() {
   if (!cropNombre.value.trim()) return
-  const datos = {
-    nombre: cropNombre.value.trim(),
-    especie: cropEspecie.value.trim(),
-    foto: cropFoto.value.trim(),
-  }
+  guardandoCultivo.value = true
+  error.value = ''
+  let fotoId = ''
   try {
+    if (cropFoto.value) fotoId = await createFoto(orchardId, cropFoto.value)
+    const datos = {
+      nombre: cropNombre.value.trim(),
+      especie: cropEspecie.value.trim(),
+      fotoId,
+    }
     const id = await createCultivo(orchardId, datos)
     // Se muestra al instante, sin recargar la lista.
     cultivos.value.unshift({ id, ...datos })
@@ -248,16 +251,19 @@ async function addCrop() {
     cropEspecie.value = ''
     cropFoto.value = ''
   } catch (e) {
+    await limpiarFoto(orchardId, fotoId, '')
     error.value = 'No se pudo crear el cultivo.'
     console.error(e)
+  } finally {
+    guardandoCultivo.value = false
   }
 }
 
-async function removeCrop(id) {
+async function removeCrop(c) {
   if (!confirm('¿Eliminar este cultivo?')) return
   try {
-    await deleteCultivo(orchardId, id)
-    cultivos.value = cultivos.value.filter((c) => c.id !== id)
+    await deleteCultivo(orchardId, c.id, c.fotoId)
+    cultivos.value = cultivos.value.filter((x) => x.id !== c.id)
   } catch (e) {
     error.value = 'No se pudo eliminar el cultivo.'
     console.error(e)
@@ -326,20 +332,19 @@ async function removeTask(t) {
 async function publicar() {
   if (!nuevoPost.value.trim()) return
   publicando.value = true
-  const datos = {
-    texto: nuevoPost.value.trim(),
-    foto: postFoto.value.trim(),
-    ...autorInfo(),
-  }
+  error.value = ''
+  let fotoId = ''
   try {
+    if (postFoto.value) fotoId = await createFoto(orchardId, postFoto.value)
+    const datos = { texto: nuevoPost.value.trim(), fotoId, ...autorInfo() }
     const { id } = await createPost(orchardId, datos)
     // La entrada aparece al instante en el feed.
     posts.value.unshift({ id, createdAt: { toDate: () => new Date() }, ...datos })
     nuevoPost.value = ''
     postFoto.value = ''
   } catch (e) {
-    error.value =
-      'No se pudo publicar. Si es la primera vez, revisa que las reglas de Firestore incluyan "posts".'
+    await limpiarFoto(orchardId, fotoId, '')
+    error.value = 'No se pudo publicar.'
     console.error(e)
   } finally {
     publicando.value = false
@@ -349,7 +354,7 @@ async function publicar() {
 async function removePost(p) {
   if (!confirm('¿Eliminar esta publicación?')) return
   try {
-    await deletePost(orchardId, p.id)
+    await deletePost(orchardId, p.id, p.fotoId)
     posts.value = posts.value.filter((x) => x.id !== p.id)
   } catch (e) {
     console.error(e)
@@ -369,15 +374,19 @@ onMounted(load)
   font-size: 0.9rem;
 }
 .hero {
+  position: relative;
   border-radius: var(--radius-md);
   background: #0f2740;
-  background-size: cover;
-  background-position: center;
   margin-bottom: 28px;
   overflow: hidden;
   box-shadow: var(--shadow-card);
 }
+.hero-img {
+  position: absolute;
+  inset: 0;
+}
 .hero-overlay {
+  position: relative;
   padding: 40px 32px 34px;
   background: linear-gradient(0deg, rgba(15, 23, 42, 0.78), rgba(15, 23, 42, 0.35));
 }
@@ -482,15 +491,10 @@ onMounted(load)
   height: 44px;
   border-radius: var(--radius-sm);
   background: #e8f3ea;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.3rem;
   flex-shrink: 0;
 }
-.crop-thumb.photo {
-  background-size: cover;
-  background-position: center;
+.inline-photo {
+  width: 100%;
 }
 .crop-meta {
   display: flex;
@@ -549,20 +553,11 @@ onMounted(load)
   margin-bottom: 10px;
 }
 .post-foto-input {
-  width: 100%;
-  border: none;
-  border-top: 1px solid var(--color-border-soft);
-  padding: 8px 0 0;
-  margin-top: 6px;
-  font-size: 0.88rem;
-}
-.post-foto-input:focus {
-  outline: none;
+  margin: 8px 0 10px;
 }
 .post-img {
   width: 100%;
-  max-height: 340px;
-  object-fit: cover;
+  height: 300px;
   border-radius: var(--radius-md);
   margin-top: 10px;
 }

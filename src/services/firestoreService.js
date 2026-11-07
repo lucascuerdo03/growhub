@@ -13,8 +13,9 @@ import {
   serverTimestamp,
   arrayUnion,
   arrayRemove,
+  writeBatch,
 } from 'firebase/firestore'
-import { db } from '../firebase'
+import { db, auth } from '../firebase'
 
 /* ----------------------------- Huertos ----------------------------- */
 
@@ -29,14 +30,13 @@ export const getHuertos = async (uid) => {
 
 export const createHuerto = async (
   uid,
-  { nombre, descripcion = '', lat = null, lng = null, imagen = '' },
+  { nombre, descripcion = '', lat = null, lng = null },
 ) => {
   const ref = await addDoc(collection(db, 'orchards'), {
     nombre,
     descripcion,
     lat,
     lng,
-    imagen,
     ownerId: uid,
     createdAt: serverTimestamp(),
   })
@@ -52,7 +52,30 @@ export const getHuerto = async (id) => {
 export const updateHuerto = (id, data) =>
   updateDoc(doc(db, 'orchards', id), data)
 
-export const deleteHuerto = (id) => deleteDoc(doc(db, 'orchards', id))
+// Firestore no borra las subcolecciones al borrar un documento: sin esto, las
+// fotos y los demás datos del huerto quedarían ocupando espacio para siempre.
+const borrarDocs = async (ref) => {
+  const snap = await getDocs(ref)
+  for (let i = 0; i < snap.docs.length; i += 400) {
+    const batch = writeBatch(db)
+    snap.docs.slice(i, i + 400).forEach((d) => batch.delete(d.ref))
+    await batch.commit()
+  }
+}
+
+export const deleteHuerto = async (id) => {
+  const sub = (...ruta) => collection(db, 'orchards', id, ...ruta)
+  try {
+    const sensores = await getDocs(sub('sensors'))
+    await Promise.all(sensores.docs.map((s) => borrarDocs(sub('sensors', s.id, 'readings'))))
+    for (const nombre of ['crops', 'tasks', 'posts', 'photos', 'sensors']) {
+      await borrarDocs(sub(nombre))
+    }
+  } catch (e) {
+    console.warn('No se pudieron borrar todos los datos del huerto:', e)
+  }
+  await deleteDoc(doc(db, 'orchards', id))
+}
 
 // Equipo: colaboradores por email (en minúsculas).
 export const addColaborador = (id, email) =>
@@ -82,6 +105,7 @@ export const createCultivo = async (orchardId, data) => {
     nombre: data.nombre,
     especie: data.especie || '',
     descripcion: data.descripcion || '',
+    fotoId: data.fotoId || '',
     foto: data.foto || '',
     fechaSiembra: data.fechaSiembra || '',
     familia: data.familia || '',
@@ -103,8 +127,10 @@ export const getCultivo = async (orchardId, cropId) => {
 export const updateCultivo = (orchardId, cropId, data) =>
   updateDoc(doc(db, 'orchards', orchardId, 'crops', cropId), data)
 
-export const deleteCultivo = (orchardId, cropId) =>
-  deleteDoc(doc(db, 'orchards', orchardId, 'crops', cropId))
+export const deleteCultivo = async (orchardId, cropId, fotoId = '') => {
+  await deleteDoc(doc(db, 'orchards', orchardId, 'crops', cropId))
+  await limpiarFoto(orchardId, fotoId, '')
+}
 
 /* ----------------------------- Sensores ---------------------------- */
 // Sensores como subcolección del huerto: orchards/{id}/sensors
@@ -203,18 +229,67 @@ export const getPosts = async (orchardId) => {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
 }
 
-export const createPost = (orchardId, { texto, autorId, autorNombre, autorFoto = '', foto = '' }) =>
+export const createPost = (orchardId, { texto, autorId, autorNombre, autorFoto = '', fotoId = '' }) =>
   addDoc(collection(db, 'orchards', orchardId, 'posts'), {
     texto,
     autorId,
     autorNombre,
     autorFoto,
-    foto,
+    fotoId,
     createdAt: serverTimestamp(),
   })
 
-export const deletePost = (orchardId, postId) =>
-  deleteDoc(doc(db, 'orchards', orchardId, 'posts', postId))
+export const deletePost = async (orchardId, postId, fotoId = '') => {
+  await deleteDoc(doc(db, 'orchards', orchardId, 'posts', postId))
+  await limpiarFoto(orchardId, fotoId, '')
+}
+
+/* ------------------------------- Fotos ----------------------------- */
+// Cada imagen es un documento aparte: orchards/{id}/photos/{fotoId} con el data
+// URL en `data`. Así leer un huerto, cultivo o publicación no descarga la imagen.
+// Una foto nunca cambia una vez creada, por lo que se puede cachear por id.
+
+const fotosCache = new Map()
+
+export const createFoto = async (orchardId, data) => {
+  const ref = await addDoc(collection(db, 'orchards', orchardId, 'photos'), {
+    data,
+    uploadedBy: auth.currentUser?.uid || '',
+    createdAt: serverTimestamp(),
+  })
+  fotosCache.set(ref.id, data)
+  return ref.id
+}
+
+export const getFoto = async (orchardId, fotoId) => {
+  if (fotosCache.has(fotoId)) return fotosCache.get(fotoId)
+  const snap = await getDoc(doc(db, 'orchards', orchardId, 'photos', fotoId))
+  const data = snap.exists() ? snap.data().data : ''
+  if (data) fotosCache.set(fotoId, data)
+  return data
+}
+
+export const deleteFoto = (orchardId, fotoId) => {
+  fotosCache.delete(fotoId)
+  return deleteDoc(doc(db, 'orchards', orchardId, 'photos', fotoId))
+}
+
+// fotoId resultante de un formulario con ImageUpload.
+export const resolverFoto = async (orchardId, actualId, nueva, quitada) => {
+  if (nueva) return createFoto(orchardId, nueva)
+  return quitada ? '' : actualId || ''
+}
+
+// Borra la foto anterior si ha dejado de usarse. No es crítico: si falla, solo
+// queda un documento sin referencias.
+export const limpiarFoto = async (orchardId, anteriorId, nuevoId) => {
+  if (!anteriorId || anteriorId === nuevoId) return
+  try {
+    await deleteFoto(orchardId, anteriorId)
+  } catch (e) {
+    console.warn('No se pudo borrar la foto anterior:', e)
+  }
+}
 
 /* ----------------------- Agregados globales ------------------------ */
 // Datos de TODOS los huertos del usuario, para las secciones globales

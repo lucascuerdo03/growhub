@@ -20,6 +20,7 @@ service cloud.firestore {
       match /crops/{cropId}    { allow read, write: if esDueno(); }
       match /tasks/{taskId}    { allow read, write: if esDueno(); }
       match /posts/{postId}    { allow read, write: if esDueno(); }
+      match /photos/{photoId}  { allow read, write: if esDueno(); }
       match /sensors/{sensorId} {
         allow read, write: if esDueno();
         match /readings/{readingId} { allow read, write: if esDueno(); }
