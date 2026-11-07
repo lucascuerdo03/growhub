@@ -89,7 +89,10 @@ const FOTOS = ['/biblioteca/tomate-corazon.jpg', '/biblioteca/berenjena-listada.
 }
 .nav-actions {
   display: flex;
-  gap: 10px;
+  gap: 8px;
+}
+.nav-actions a {
+  white-space: nowrap;
 }
 .btn-ghost {
   color: var(--color-text);
@@ -213,6 +216,18 @@ const FOTOS = ['/biblioteca/tomate-corazon.jpg', '/biblioteca/berenjena-listada.
   padding: 26px;
   color: var(--color-text-soft);
   font-size: 0.88rem;
+}
+@media (max-width: 520px) {
+  .nav {
+    padding: 14px 16px;
+  }
+  .brand {
+    font-size: 1.25rem;
+  }
+  .nav-actions a {
+    padding: 8px 11px;
+    font-size: 0.88rem;
+  }
 }
 @media (max-width: 760px) {
   .hero {
