@@ -14,16 +14,28 @@
         </StoredImage>
         <div class="ficha-body">
           <div class="ficha-head">
-            <h1>{{ cultivo.nombre }}</h1>
+            <div>
+              <h1>{{ cultivo.nombre }}</h1>
+              <p class="etapa" :class="estado.etapa">{{ ETAPAS[estado.etapa] }}</p>
+            </div>
             <button v-if="permisos.manageCrops" class="edit-btn" @click="editing = !editing">{{ editing ? 'Cancelar' : 'Editar' }}</button>
           </div>
           <div class="pills">
             <span v-if="cultivo.especie" class="pill type">{{ cultivo.especie }}</span>
             <span v-if="cultivo.familia" class="pill">{{ cultivo.familia }}</span>
-            <span v-if="cultivo.fechaSiembra" class="pill">Siembra: {{ cultivo.fechaSiembra }}</span>
+            <span v-if="cultivo.fechaSiembra" class="pill">Sembrado el {{ fechaCorta(cultivo.fechaSiembra) }}</span>
           </div>
           <p v-if="cultivo.descripcion" class="desc">{{ cultivo.descripcion }}</p>
 
+          <div v-if="estado.pct !== null" class="progreso">
+            <div class="barra" role="progressbar" :aria-valuenow="estado.pct" aria-valuemin="0" aria-valuemax="100" aria-label="Progreso hasta la cosecha">
+              <i :class="estado.etapa" :style="{ width: `${estado.pct}%` }"></i>
+            </div>
+            <span>{{ estado.texto }}</span>
+          </div>
+          <p v-else-if="estado.etapa === 'sin-fecha' && permisos.manageCrops" class="pista">
+            Indica la fecha de siembra para ver cuánto le falta a la cosecha.
+          </p>
           <dl v-if="entrada" class="datos">
             <div><dt>Riego</dt><dd>{{ entrada.riego }}</dd></div>
             <div><dt>Exposición</dt><dd>{{ entrada.sol }}</dd></div>
@@ -79,6 +91,10 @@
             :foto-id="cultivo.fotoId"
             :url="cultivo.foto"
           />
+          <template v-if="!entrada">
+            <label>Días hasta la cosecha</label>
+            <input v-model.number="fDias" type="number" min="1" placeholder="Opcional" />
+          </template>
           <label>Descripción</label>
           <textarea v-model="fDesc" rows="3"></textarea>
           <p v-if="savedMsg" class="success">{{ savedMsg }}</p>
@@ -94,6 +110,7 @@
 
         <form v-if="permisos.manageTasks" class="link-row" @submit.prevent="addTask">
           <input v-model="taskTitulo" class="task-input" placeholder="Nueva tarea para esta planta" />
+          <input v-model="taskFecha" class="task-date" type="date" aria-label="Fecha de la tarea" />
           <select v-model="taskFrec" aria-label="Frecuencia de riego">
             <option v-for="f in FRECUENCIAS" :key="f" :value="f">{{ f }}</option>
           </select>
@@ -101,22 +118,21 @@
         </form>
 
         <p v-if="taskError" class="error">{{ taskError }}</p>
-        <p v-if="!tareas.length" class="muted small">Este cultivo aún no tiene tareas.</p>
-
-        <div v-for="t in tareas" :key="t.id" class="task" :class="{ done: t.completada }">
-          <input
-            type="checkbox"
-            :checked="t.completada"
-            :disabled="!permisos.completeTasks"
-            :aria-label="`Completar ${t.titulo}`"
-            @change="toggleTask(t)"
-          />
-          <div class="task-info">
-            <strong>{{ t.titulo }}</strong>
-            <span v-if="t.frecuenciaRiego" class="muted small">Riego: {{ t.frecuenciaRiego }}</span>
-          </div>
-          <button v-if="permisos.manageTasks" class="unlink" aria-label="Eliminar" @click="removeTask(t)">✕</button>
+        <div v-if="!tareas.length" class="vacio">
+          <Ilustracion tipo="tareas" />
+          <p>Este cultivo aún no tiene tareas.</p>
         </div>
+        <TransitionGroup name="tarea-lista" tag="div">
+          <TaskItem
+            v-for="t in tareas"
+            :key="t.id"
+            :tarea="t"
+            :puede-completar="permisos.completeTasks"
+            :puede-borrar="permisos.manageTasks"
+            @toggle="toggleTask"
+            @remove="removeTask"
+          />
+        </TransitionGroup>
       </section>
 
       <!-- Sensores vinculados -->
@@ -172,7 +188,11 @@ import SensorChart from '../components/SensorChart.vue'
 import ImageUpload from '../components/ImageUpload.vue'
 import StoredImage from '../components/StoredImage.vue'
 import CalendarioCultivo from '../components/CalendarioCultivo.vue'
+import TaskItem from '../components/TaskItem.vue'
+import Ilustracion from '../components/Ilustracion.vue'
 import { entradaDeCultivo, textoCosecha } from '../data/cropsLibrary'
+import { ETAPAS, estadoCultivo } from '../utils/cultivos'
+import { fechaCorta, hoyISO } from '../utils/fechas'
 import { SENSOR_TYPES } from '../utils/sensorTypes'
 import { useAuth } from '../composables/useAuth'
 import { useHuerto } from '../composables/useHuertos'
@@ -213,6 +233,7 @@ const { porClave: lecturasPorClave } = useVivoMuchos(() =>
 
 const cultivo = computed(() => cultivos.value.find((c) => c.id === cropId) || null)
 const entrada = computed(() => entradaDeCultivo(cultivo.value))
+const estado = computed(() => estadoCultivo(cultivo.value))
 const tareas = computed(() => todasTareas.value.filter((t) => t.cropId === cropId))
 const sensores = computed(() =>
   todosSensores.value.map((s) => ({
@@ -232,6 +253,7 @@ const savedMsg = ref('')
 const sensorAVincular = ref(null)
 const taskTitulo = ref('')
 const taskFrec = ref('Cada 2-3 días')
+const taskFecha = ref(hoyISO())
 const taskError = ref('')
 
 const fNombre = ref('')
@@ -239,6 +261,7 @@ const fEspecie = ref('')
 const fFecha = ref('')
 const fFoto = ref('')
 const fFotoQuitada = ref(false)
+const fDias = ref('')
 const fDesc = ref('')
 
 // El formulario se rellena al abrirlo: así un cambio de otro miembro no pisa lo
@@ -248,6 +271,7 @@ watch(editing, (abierto) => {
   fNombre.value = cultivo.value.nombre || ''
   fEspecie.value = cultivo.value.especie || ''
   fFecha.value = cultivo.value.fechaSiembra || ''
+  fDias.value = cultivo.value.diasCosecha || ''
   fDesc.value = cultivo.value.descripcion || ''
   fFoto.value = ''
   fFotoQuitada.value = false
@@ -264,6 +288,7 @@ async function guardar() {
       nombre: fNombre.value.trim(),
       especie: fEspecie.value.trim(),
       fechaSiembra: fFecha.value,
+      diasCosecha: fDias.value || null,
       fotoId,
       // Una foto nueva o quitada sustituye también a la URL antigua, si la había.
       foto: fFoto.value || fFotoQuitada.value ? '' : cultivo.value.foto || '',
@@ -288,7 +313,7 @@ async function addTask() {
   taskError.value = ''
   taskTitulo.value = ''
   try {
-    await createTarea(orchardId, { titulo, frecuenciaRiego: taskFrec.value, cropId })
+    await createTarea(orchardId, { titulo, frecuenciaRiego: taskFrec.value, cropId, fecha: taskFecha.value })
   } catch (e) {
     taskTitulo.value = titulo
     taskError.value = mensajeError(e, 'No se pudo crear la tarea.')
@@ -356,10 +381,9 @@ async function desvincular(s) {
 .card {
   background: var(--color-surface);
   border: 1px solid var(--color-border-soft);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-  padding: 24px;
-  margin-bottom: 22px;
+  border-radius: var(--radius-md);
+  padding: 22px;
+  margin-bottom: 18px;
 }
 .ficha {
   display: flex;
@@ -367,8 +391,9 @@ async function desvincular(s) {
   flex-wrap: wrap;
 }
 .thumb {
-  width: 150px;
-  height: 150px;
+  width: 260px;
+  max-width: 100%;
+  aspect-ratio: 4 / 3;
   border-radius: var(--radius-md);
   background: #e8f3ea;
   flex-shrink: 0;
@@ -385,7 +410,6 @@ async function desvincular(s) {
 }
 .ficha-head h1 {
   margin: 0;
-  color: var(--color-heading);
 }
 .edit-btn {
   background: var(--color-primary-soft);
@@ -404,15 +428,15 @@ async function desvincular(s) {
   margin: 10px 0;
 }
 .pill {
-  background: #eef2f7;
-  color: #475569;
+  background: var(--color-border-soft);
+  color: var(--color-text-soft);
   font-size: 0.78rem;
   padding: 3px 10px;
   border-radius: 999px;
 }
 .pill.type {
-  background: #ede9fe;
-  color: #6d28d9;
+  background: var(--color-tierra-suave);
+  color: var(--color-tierra-oscuro);
 }
 .desc {
   color: var(--color-text-soft);
@@ -433,6 +457,16 @@ async function desvincular(s) {
   margin: 0;
   font-weight: 600;
   text-align: right;
+}
+.vacio {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  color: var(--color-text-soft);
+}
+.vacio p {
+  margin: 0;
 }
 .ver-biblioteca {
   display: inline-block;
@@ -461,10 +495,8 @@ async function desvincular(s) {
   color: var(--color-text-soft);
 }
 .section-title {
-  margin: 0 0 16px;
-  font-size: 1.15rem;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
+  margin: 0 0 14px;
+  font-size: 1.3rem;
 }
 .form {
   display: flex;
@@ -497,6 +529,54 @@ async function desvincular(s) {
   border: 1px solid var(--color-input-border);
   border-radius: var(--radius-sm);
 }
+.etapa {
+  margin: 2px 0 0;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--color-text-soft);
+}
+.etapa.sembrado {
+  color: var(--color-tierra-oscuro);
+}
+.etapa.creciendo,
+.etapa.listo {
+  color: var(--color-verde-oscuro);
+}
+.progreso {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0 14px;
+  font-size: 0.86rem;
+  color: var(--color-text-soft);
+}
+.barra {
+  flex: 1;
+  height: 7px;
+  border-radius: 4px;
+  background: var(--color-tierra-suave);
+  overflow: hidden;
+}
+.barra i {
+  display: block;
+  height: 100%;
+  background: var(--color-verde);
+}
+.barra i.sembrado {
+  background: var(--color-tierra);
+}
+.barra i.listo {
+  background: var(--color-verde-oscuro);
+}
+.pista {
+  font-size: 0.86rem;
+  color: var(--color-text-soft);
+}
+.link-row .task-date {
+  padding: 10px 12px;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-sm);
+}
 .link-row .task-input {
   flex: 1;
   min-width: 180px;
@@ -507,28 +587,6 @@ async function desvincular(s) {
 .link-row select[aria-label='Frecuencia de riego'] {
   flex: 0 1 180px;
   min-width: 140px;
-}
-.task {
-  display: flex;
-  align-items: flex-start;
-  gap: 11px;
-  padding: 12px 0;
-  border-top: 1px solid var(--color-border-soft);
-}
-.task input[type='checkbox'] {
-  width: 18px;
-  height: 18px;
-  margin-top: 2px;
-  cursor: pointer;
-}
-.task-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-.task.done strong {
-  text-decoration: line-through;
-  color: #9ca3af;
 }
 .primary {
   background: var(--color-primary);

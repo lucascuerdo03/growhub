@@ -129,7 +129,7 @@ input:disabled {
 .save {
   margin-top: 18px;
   padding: 11px;
-  background: #0284c7;
+  background: var(--color-primary);
   color: white;
   border: none;
   border-radius: 8px;
@@ -141,9 +141,9 @@ input:disabled {
   cursor: default;
 }
 .error {
-  color: #dc2626;
+  color: var(--color-danger);
 }
 .success {
-  color: #16a34a;
+  color: var(--color-success);
 }
 </style>

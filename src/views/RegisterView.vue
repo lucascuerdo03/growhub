@@ -131,7 +131,7 @@ async function register() {
   cursor: pointer;
 }
 .pw-toggle:hover {
-  color: #0284c7;
+  color: var(--color-primary);
   background: transparent;
 }
 </style>

@@ -17,6 +17,7 @@
 
     <template v-else-if="!sensores.length">
       <div class="empty">
+        <Ilustracion tipo="sensores" />
         <p>No hay sensores todavía. Entra en un huerto para añadirlos.</p>
         <router-link to="/dashboard" class="link">Ir a Mis Huertos →</router-link>
       </div>
@@ -71,6 +72,7 @@ import { useHuertos, usePorHuerto } from '../composables/useHuertos'
 import { useVivoMuchos } from '../composables/useVivo'
 import { permisosEn, mensajeError } from '../utils/permissions'
 import SensorChart from '../components/SensorChart.vue'
+import Ilustracion from '../components/Ilustracion.vue'
 import { SENSOR_TYPES, simularValor } from '../utils/sensorTypes'
 import {
   fuenteSensores,
@@ -204,7 +206,7 @@ async function simular(s) {
   width: 100%;
   padding: 9px;
   background: var(--color-primary-soft);
-  color: #0369a1;
+  color: var(--color-primary-dark);
   border: 1px solid var(--color-primary-border);
   border-radius: var(--radius-sm);
   font-weight: 600;

@@ -21,7 +21,10 @@
     <p v-if="error" class="error">{{ error }}</p>
     <p v-if="!listo || (huerto && cargandoSensores)" class="muted">Cargando…</p>
     <p v-else-if="!huerto" class="error">No tienes acceso a este huerto o ya no existe.</p>
-    <p v-else-if="!sensores.length" class="muted">No hay sensores en este huerto.</p>
+    <div v-else-if="!sensores.length" class="vacio">
+      <Ilustracion tipo="sensores" />
+      <p class="muted">No hay sensores en este huerto. Crea el primero con el formulario de arriba.</p>
+    </div>
 
     <section v-for="g in grupos" v-else :key="g.id" class="group">
       <h2 class="group-title">
@@ -91,6 +94,7 @@ import { useHuerto } from '../composables/useHuertos'
 import { useVivo, useVivoMuchos } from '../composables/useVivo'
 import { mensajeError } from '../utils/permissions'
 import SensorChart from '../components/SensorChart.vue'
+import Ilustracion from '../components/Ilustracion.vue'
 import { SENSOR_TYPES, simularValor } from '../utils/sensorTypes'
 import {
   fuenteSensores,
@@ -223,7 +227,7 @@ async function simular(s) {
 .back {
   display: inline-block;
   margin-bottom: 12px;
-  color: #0284c7;
+  color: var(--color-primary);
   text-decoration: none;
   font-size: 0.9rem;
 }
@@ -245,6 +249,13 @@ h1 {
 .add-bar input {
   flex: 1;
   min-width: 160px;
+}
+.vacio {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 0;
 }
 .group {
   margin-bottom: 30px;
@@ -333,7 +344,7 @@ h1 {
 }
 .add-bar button {
   padding: 10px 20px;
-  background: #0284c7;
+  background: var(--color-primary);
   color: white;
   border: none;
   border-radius: 8px;
@@ -399,9 +410,9 @@ h1 {
   margin-top: 12px;
   width: 100%;
   padding: 9px;
-  background: #e0f2fe;
-  color: #0369a1;
-  border: 1px solid #bae6fd;
+  background: var(--color-primary-soft);
+  color: var(--color-primary-dark);
+  border: 1px solid var(--color-primary-border);
   border-radius: 8px;
   font-weight: 600;
   cursor: pointer;
@@ -417,7 +428,7 @@ h1 {
   cursor: pointer;
 }
 .del:hover {
-  color: #dc2626;
+  color: var(--color-danger);
 }
 .muted {
   color: #6b7280;
@@ -426,6 +437,6 @@ h1 {
   font-size: 0.85rem;
 }
 .error {
-  color: #dc2626;
+  color: var(--color-danger);
 }
 </style>

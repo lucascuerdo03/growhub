@@ -4,27 +4,41 @@
    para que aplique a toda la app.
 ----------------------------------------------------------------- */
 :root {
-  /* Paleta */
-  --color-primary: #0284c7;
-  --color-primary-dark: #0369a1;
-  --color-primary-soft: #e0f2fe;
-  --color-primary-border: #bae6fd;
-  --color-heading: #2563eb;
+  /* Paleta. El azul de la marca, algo más oscuro para que el texto blanco se lea bien
+     sobre él; verde natural para lo que crece y tierra para los fondos cálidos. */
+  --color-primary: #0272ad;
+  --color-primary-dark: #035a8a;
+  --color-primary-soft: #dff0fa;
+  --color-primary-border: #b5dcf2;
+  --color-heading: #17262b;
   --color-secondary: #4f46e5;
 
-  --color-bg: #f8fafc;
+  --color-bg: #f6f7f3;
   --color-surface: #ffffff;
   --color-navbar: #ffffff;
 
-  --color-text: #1e293b;
-  --color-text-soft: #64748b;
-  --color-border: #e2e8f0;
-  --color-border-soft: #f1f5f9;
-  --color-input-border: #cbd5e1;
+  --color-text: #17262b;
+  --color-text-soft: #566870;
+  --color-border: #e0e3da;
+  --color-border-soft: #eceee7;
+  --color-input-border: #c5cabd;
 
-  --color-success: #10b981;
-  --color-danger: #ef4444;
-  --color-accent-green: #166534;
+  --color-success: #2f6a3e;
+  --color-danger: #c0392b;
+  --color-accent-green: #2f6a3e;
+
+  /* Huerto */
+  --color-verde: #4f8a5b;
+  --color-verde-claro: #a9cdaf;
+  --color-verde-oscuro: #2f6a3e;
+  --color-tierra: #b98a57;
+  --color-tierra-oscuro: #7c5a35;
+  --color-tierra-suave: #efe8dc;
+
+  /* Tipografías alojadas en la propia app: no dependen de internet. */
+  --font-texto: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --font-titulos: 'Zilla Slab', Georgia, 'Times New Roman', serif;
 
   /* Acentos de sensores (igual que la referencia) */
   --accent-temp: #ef4444;
@@ -32,10 +46,10 @@
   --accent-sun: #f59e0b;
 
   /* Formas y sombras (tomadas de la referencia) */
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --shadow-card: 0 4px 6px -1px #0000000d, 0 2px 4px -2px #0000000d;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --shadow-card: 0 1px 2px #17262b12;
   --shadow-elevated: 0 10px 15px -3px #0000000d, 0 4px 6px -4px #0000000d;
   --shadow-hover: 0 20px 25px -5px #0000001a, 0 8px 10px -6px #0000001a;
 }
@@ -51,8 +65,7 @@ body {
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    'Helvetica Neue', Arial, sans-serif;
+  font-family: var(--font-texto);
   color: var(--color-text);
   background: var(--color-bg);
   -webkit-font-smoothing: antialiased;
@@ -64,8 +77,12 @@ h1,
 h2,
 h3,
 h4 {
-  line-height: 1.25;
+  line-height: 1.2;
   color: var(--color-text);
+  font-family: var(--font-titulos);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  text-wrap: balance;
 }
 
 a {
@@ -81,4 +98,35 @@ textarea {
 
 #app {
   min-height: 100vh;
+}
+
+/* Transición al completar una tarea: se dibuja la marca y luego la fila se recoge. */
+.tarea-lista-move {
+  transition: transform 0.3s ease;
+}
+.tarea-lista-enter-active {
+  transition: opacity 0.2s ease;
+}
+.tarea-lista-enter-from {
+  opacity: 0;
+}
+.tarea-lista-leave-active {
+  max-height: 140px;
+  overflow: hidden;
+  transition: opacity 0.2s ease, max-height 0.2s ease;
+}
+.tarea-lista-leave-active.hecha {
+  transition-delay: 0.4s;
+}
+.tarea-lista-leave-to {
+  max-height: 0;
+  opacity: 0;
+  padding-block: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tarea-lista-move,
+  .tarea-lista-enter-active,
+  .tarea-lista-leave-active {
+    transition: none;
+  }
 }

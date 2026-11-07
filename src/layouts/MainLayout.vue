@@ -5,7 +5,7 @@
         <router-link to="/dashboard" class="brand">GrowHub</router-link>
 
         <nav class="nav-links" :class="{ open }" @click="open = false">
-          <router-link to="/dashboard">Huertos</router-link>
+          <router-link to="/dashboard">Hoy</router-link>
           <router-link to="/tasks">Tareas</router-link>
           <router-link to="/sensors">Sensores</router-link>
           <router-link to="/biblioteca">Biblioteca</router-link>
@@ -79,7 +79,6 @@ async function logout() {
 }
 .navbar {
   background: var(--color-surface);
-  box-shadow: var(--shadow-card);
   border-bottom: 1px solid var(--color-border);
   padding: 0.85rem 1.5rem;
   position: sticky;
@@ -95,9 +94,10 @@ async function logout() {
   margin: 0 auto;
 }
 .brand {
-  font-size: 1.25rem;
+  font-family: var(--font-titulos);
+  font-size: 1.45rem;
   font-weight: 700;
-  color: var(--color-text);
+  color: var(--color-verde-oscuro);
   text-decoration: none;
   white-space: nowrap;
   letter-spacing: -0.01em;

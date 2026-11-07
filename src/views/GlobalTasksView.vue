@@ -15,6 +15,7 @@
           <option value="">General</option>
           <option v-for="c in cultivosDe(orchardId)" :key="c.id" :value="c.id">{{ c.nombre }}</option>
         </select>
+        <input v-model="fecha" class="fecha" type="date" aria-label="Fecha de la tarea" />
         <select v-model="frecuenciaRiego" aria-label="Frecuencia de riego">
           <option v-for="f in FRECUENCIAS" :key="f" :value="f">{{ f }}</option>
         </select>
@@ -26,11 +27,15 @@
     <p v-if="!listos" class="muted">Cargando…</p>
     <template v-else-if="!huertos.length">
       <div class="empty">
+        <Ilustracion tipo="huerto" />
         <p>Aún no tienes huertos.</p>
         <router-link to="/dashboard" class="link">Crea tu primer huerto →</router-link>
       </div>
     </template>
-    <p v-else-if="!tareas.length" class="muted">No hay tareas todavía.</p>
+    <div v-else-if="!tareas.length" class="empty">
+      <Ilustracion tipo="tareas" />
+      <p>No hay tareas todavía. Crea la primera arriba.</p>
+    </div>
 
     <template v-else>
     <select v-if="opcionesPlanta.length" v-model="filtroPlanta" class="task-filter" aria-label="Filtrar por planta">
@@ -39,23 +44,19 @@
       <option v-for="o in opcionesPlanta" :key="o.valor" :value="o.valor">{{ o.etiqueta }}</option>
     </select>
     <p v-if="!tareasFiltradas.length" class="muted">No hay tareas para esta planta.</p>
-    <ul class="list">
-      <li v-for="t in tareasFiltradas" :key="t.orchardId + t.id" :class="{ done: t.completada }">
-        <input type="checkbox" :checked="t.completada" :disabled="!permisosDe(t).completeTasks" @change="toggle(t)" />
-        <div class="info">
-          <strong>{{ t.titulo }}</strong>
-          <p v-if="t.descripcion" class="desc">{{ t.descripcion }}</p>
-          <div class="tags">
-            <router-link :to="`/orchard/${t.orchardId}`" class="tag orchard">
-              {{ t.orchardNombre }}
-            </router-link>
-            <span class="tag crop">{{ plantaDe(t) }}</span>
-            <span v-if="t.frecuenciaRiego" class="tag water">Riego: {{ t.frecuenciaRiego }}</span>
-          </div>
-        </div>
-        <button v-if="permisosDe(t).manageTasks" class="del" aria-label="Eliminar" @click="remove(t)">✕</button>
-      </li>
-    </ul>
+    <TransitionGroup name="tarea-lista" tag="div" class="list">
+      <TaskItem
+        v-for="t in tareasFiltradas"
+        :key="t.orchardId + t.id"
+        :tarea="t"
+        :planta="plantaDe(t)"
+        :huerto="{ id: t.orchardId, nombre: t.orchardNombre }"
+        :puede-completar="permisosDe(t).completeTasks"
+        :puede-borrar="permisosDe(t).manageTasks"
+        @toggle="toggle"
+        @remove="remove"
+      />
+    </TransitionGroup>
     </template>
   </div>
 </template>
@@ -65,6 +66,9 @@ import { ref, computed, watch } from 'vue'
 import { useAuth } from '../composables/useAuth'
 import { useHuertos, usePorHuerto } from '../composables/useHuertos'
 import { permisosEn, mensajeError } from '../utils/permissions'
+import { hoyISO } from '../utils/fechas'
+import TaskItem from '../components/TaskItem.vue'
+import Ilustracion from '../components/Ilustracion.vue'
 import {
   fuenteCultivos,
   fuenteTareas,
@@ -86,6 +90,7 @@ const filtroPlanta = ref('')
 const titulo = ref('')
 const orchardId = ref(null)
 const frecuenciaRiego = ref('Cada 2-3 días')
+const fecha = ref(hoyISO())
 const saving = ref(false)
 const error = ref('')
 
@@ -95,7 +100,12 @@ const tareas = computed(() =>
     .flatMap((h) =>
       (tareasPorHuerto.value[h.id] || []).map((t) => ({ ...t, orchardId: h.id, orchardNombre: h.nombre })),
     )
-    .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)),
+    // Pendientes primero, por fecha; las tareas sin fecha y las hechas, al final.
+    .sort(
+      (a, b) =>
+        Number(!!a.completada) - Number(!!b.completada) ||
+        (a.fecha || '9999').localeCompare(b.fecha || '9999'),
+    ),
 )
 const huertosEditables = computed(() =>
   huertos.value.filter((h) => permisosEn(h, user.value.uid).manageTasks),
@@ -138,6 +148,7 @@ async function add() {
     titulo: titulo.value.trim(),
     frecuenciaRiego: frecuenciaRiego.value,
     cropId: cropId.value || null,
+    fecha: fecha.value,
   }
   titulo.value = ''
   // Un filtro de otra planta ocultaría la tarea recién creada.
@@ -209,6 +220,11 @@ async function remove(t) {
   gap: 10px;
   flex-wrap: wrap;
 }
+.task-form .fecha {
+  padding: 10px 12px;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-sm);
+}
 .task-form select {
   flex: 1;
   min-width: 140px;
@@ -236,75 +252,10 @@ async function remove(t) {
   margin-bottom: 14px;
 }
 .list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
   max-width: 760px;
 }
-.list li {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  background: #f0f7ff;
-  border: 1px solid #dbeafe;
-  padding: 15px 18px;
-  border-radius: var(--radius-md);
-  margin-bottom: 12px;
-}
-.list li.done {
-  background: var(--color-surface);
-  border-color: var(--color-border-soft);
-}
-.list li.done .info strong {
-  text-decoration: line-through;
-  color: #9ca3af;
-}
-.list input[type='checkbox'] {
-  margin-top: 4px;
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
-}
-.info {
-  flex: 1;
-}
-.desc {
-  margin: 4px 0;
-  color: var(--color-text-soft);
-  font-size: 0.9rem;
-}
-.tags {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 6px;
-}
-.tag {
-  font-size: 0.78rem;
-  padding: 3px 8px;
-  border-radius: 999px;
-  text-decoration: none;
-}
-.tag.orchard {
-  background: #e8f3ea;
-  color: var(--color-accent-green);
-}
-.tag.crop {
-  background: #eef2f7;
-  color: #475569;
-}
-.tag.water {
-  background: var(--color-primary-soft);
-  color: #0369a1;
-}
-.del {
-  background: transparent;
-  border: none;
-  color: #9ca3af;
-  cursor: pointer;
-}
-.del:hover {
-  color: var(--color-danger);
+.list :deep(.tarea:first-child) {
+  border-top: none;
 }
 .muted {
   color: var(--color-text-soft);
@@ -313,11 +264,9 @@ async function remove(t) {
   color: var(--color-danger);
 }
 .empty {
-  background: var(--color-surface);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-card);
-  padding: 30px;
+  padding: 24px 0;
   max-width: 420px;
+  color: var(--color-text-soft);
 }
 .empty .link {
   font-weight: 600;

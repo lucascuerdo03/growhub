@@ -6,6 +6,7 @@
     <form v-if="permisos.manageTasks" class="task-form" @submit.prevent="add">
       <input v-model="titulo" class="full" placeholder="Título de la tarea (ej: Regar tomates)" />
       <input v-model="descripcion" class="full" placeholder="Descripción (opcional)" />
+      <input v-model="fecha" class="full" type="date" aria-label="Fecha de la tarea" />
 
       <div class="row">
         <label>
@@ -39,26 +40,18 @@
       <option v-for="c in cultivos" :key="c.id" :value="c.id">{{ c.nombre }}</option>
     </select>
     <p v-if="!tareasFiltradas.length" class="muted">No hay tareas para esta planta.</p>
-    <ul class="list">
-      <li v-for="t in tareasFiltradas" :key="t.id" :class="{ done: t.completada }">
-        <input
-          type="checkbox"
-          :checked="t.completada"
-          :disabled="!permisos.completeTasks"
-          @change="toggle(t)"
-          title="Marcar como completada"
-        />
-        <div class="info">
-          <strong>{{ t.titulo }}</strong>
-          <p v-if="t.descripcion" class="desc">{{ t.descripcion }}</p>
-          <div class="tags">
-            <span class="tag crop">{{ plantaDe(t) }}</span>
-            <span v-if="t.frecuenciaRiego" class="tag water">Riego: {{ t.frecuenciaRiego }}</span>
-          </div>
-        </div>
-        <button v-if="permisos.manageTasks" class="del" aria-label="Eliminar" @click="remove(t)">✕</button>
-      </li>
-    </ul>
+    <TransitionGroup name="tarea-lista" tag="div" class="list">
+      <TaskItem
+        v-for="t in tareasFiltradas"
+        :key="t.id"
+        :tarea="t"
+        :planta="plantaDe(t)"
+        :puede-completar="permisos.completeTasks"
+        :puede-borrar="permisos.manageTasks"
+        @toggle="toggle"
+        @remove="remove"
+      />
+    </TransitionGroup>
     </template>
   </div>
 </template>
@@ -70,6 +63,8 @@ import { useAuth } from '../composables/useAuth'
 import { useHuerto } from '../composables/useHuertos'
 import { useVivo } from '../composables/useVivo'
 import { mensajeError } from '../utils/permissions'
+import { hoyISO } from '../utils/fechas'
+import TaskItem from '../components/TaskItem.vue'
 import {
   fuenteCultivos,
   fuenteTareas,
@@ -94,6 +89,7 @@ const titulo = ref('')
 const descripcion = ref('')
 const cropId = ref(null)
 const frecuenciaRiego = ref('Cada 2-3 días')
+const fecha = ref(hoyISO())
 const saving = ref(false)
 const error = ref('')
 const filtroPlanta = ref('')
@@ -114,6 +110,7 @@ async function add() {
     descripcion: descripcion.value.trim(),
     cropId: cropId.value,
     frecuenciaRiego: frecuenciaRiego.value,
+    fecha: fecha.value,
   }
   titulo.value = ''
   descripcion.value = ''
@@ -163,7 +160,7 @@ async function remove(t) {
 .back {
   display: inline-block;
   margin-bottom: 12px;
-  color: #0284c7;
+  color: var(--color-primary);
   text-decoration: none;
   font-size: 0.9rem;
 }
@@ -203,7 +200,7 @@ h1 {
 .task-form button {
   align-self: flex-start;
   padding: 10px 20px;
-  background: #0284c7;
+  background: var(--color-primary);
   color: white;
   border: none;
   border-radius: 8px;
@@ -224,75 +221,12 @@ h1 {
   margin-bottom: 14px;
 }
 .list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
   max-width: 720px;
-}
-.list li {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  background: #f0f7ff;
-  border: 1px solid #dbeafe;
-  padding: 15px 18px;
-  border-radius: var(--radius-md);
-  margin-bottom: 12px;
-}
-.list li.done {
-  background: #fff;
-  border-color: #f1f5f9;
-}
-.list li.done .info strong {
-  text-decoration: line-through;
-  color: #9ca3af;
-}
-.list input[type='checkbox'] {
-  margin-top: 4px;
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
-}
-.info {
-  flex: 1;
-}
-.desc {
-  margin: 4px 0;
-  color: #6b7280;
-  font-size: 0.9rem;
-}
-.tags {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 6px;
-}
-.tag {
-  font-size: 0.78rem;
-  padding: 3px 8px;
-  border-radius: 999px;
-}
-.tag.crop {
-  background: #e8f3ea;
-  color: #2e7d4f;
-}
-.tag.water {
-  background: #e7f1fb;
-  color: #0369a1;
-}
-.del {
-  background: transparent;
-  border: none;
-  color: #9ca3af;
-  cursor: pointer;
-}
-.del:hover {
-  color: #dc2626;
 }
 .muted {
   color: #6b7280;
 }
 .error {
-  color: #dc2626;
+  color: var(--color-danger);
 }
 </style>

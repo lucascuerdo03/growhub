@@ -10,16 +10,18 @@
 
     <section class="hero">
       <div class="hero-inner">
-        <span class="eyebrow">Gestión inteligente de huertos</span>
-        <h1>Cultiva mejor con <span>GrowHub</span></h1>
+        <h1>Tu huerto, al día</h1>
         <p class="tagline">
-          Controla tus huertos, cultivos y sensores desde un solo lugar.
-          Datos en tiempo real, tareas de riego y un cuaderno de campo colaborativo.
+          Qué regar hoy, qué está a punto de cosecharse y qué toca sembrar este mes. Comparte el
+          huerto con quien lo trabaja contigo y consulta más de cien cultivos con su calendario para España.
         </p>
         <div class="hero-cta">
           <router-link to="/register" class="btn-solid big">Crear cuenta</router-link>
           <router-link to="/login" class="btn-ghost big">Iniciar sesión</router-link>
         </div>
+      </div>
+      <div class="hero-fotos" aria-hidden="true">
+        <img v-for="f in FOTOS" :key="f" :src="f" alt="" width="800" height="600" />
       </div>
     </section>
 
@@ -27,17 +29,17 @@
       <article class="feature">
         <span class="f-ic"><Sprout :size="22" /></span>
         <h3>Gestión de huertos</h3>
-        <p>Organiza tus huertos y cultivos, con ubicación en el mapa y fichas detalladas.</p>
+        <p>Tus huertos y cultivos, con la etapa de cada planta y lo que le falta para la cosecha.</p>
       </article>
       <article class="feature">
         <span class="f-ic"><Radio :size="22" /></span>
         <h3>Sensores</h3>
-        <p>Temperatura, humedad y luz con histórico y gráficas claras de cada sensor.</p>
+        <p>Temperatura, humedad del suelo y luz de cada planta, con su histórico.</p>
       </article>
       <article class="feature">
         <span class="f-ic"><ListChecks :size="22" /></span>
-        <h3>Tareas de riego</h3>
-        <p>Planifica el riego y marca las tareas completadas.</p>
+        <h3>Tareas del día</h3>
+        <p>Riego, abonado y cosecha, con aviso si se prevé lluvia en tu huerto.</p>
       </article>
       <article class="feature">
         <span class="f-ic"><BookOpen :size="22" /></span>
@@ -53,7 +55,7 @@
     </section>
 
     <footer class="foot">
-      <p>© 2026 GrowHub · Gestión inteligente de huertos</p>
+      <p>© 2026 GrowHub</p>
     </footer>
   </div>
 </template>
@@ -62,6 +64,8 @@
 // Página pública de entrada. Los usuarios ya logueados se redirigen al
 // dashboard desde el guard del router.
 import { Sprout, Radio, ListChecks, BookOpen } from 'lucide-vue-next'
+
+const FOTOS = ['/biblioteca/tomate-corazon.jpg', '/biblioteca/berenjena-listada.jpg', '/biblioteca/lechuga-roble.jpg']
 </script>
 
 <style scoped>
@@ -78,9 +82,10 @@ import { Sprout, Radio, ListChecks, BookOpen } from 'lucide-vue-next'
   margin: 0 auto;
 }
 .brand {
-  font-size: 1.3rem;
+  font-family: var(--font-titulos);
+  font-size: 1.5rem;
   font-weight: 700;
-  color: var(--color-text);
+  color: var(--color-verde-oscuro);
 }
 .nav-actions {
   display: flex;
@@ -113,33 +118,39 @@ import { Sprout, Radio, ListChecks, BookOpen } from 'lucide-vue-next'
   font-size: 1.02rem;
 }
 .hero {
-  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 40px;
+  align-items: center;
   max-width: 1120px;
   margin: 0 auto;
-  padding: 72px 28px 60px;
-  overflow: hidden;
+  padding: 40px 28px 56px;
 }
 .hero-inner {
-  position: relative;
-  z-index: 2;
-  max-width: 640px;
+  min-width: 0;
 }
-.eyebrow {
-  display: inline-block;
-  background: var(--color-primary-soft);
-  color: var(--color-primary-dark);
-  font-weight: 600;
-  font-size: 0.85rem;
-  padding: 6px 14px;
-  border-radius: 999px;
+.hero-fotos {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 8px;
+  min-width: 0;
+}
+.hero-fotos img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--color-tierra-suave);
+}
+.hero-fotos img:first-child {
+  grid-row: span 2;
 }
 .hero h1 {
-  font-size: 3rem;
-  margin: 18px 0 14px;
+  font-size: 3.4rem;
+  margin: 0 0 14px;
   line-height: 1.1;
-}
-.hero h1 span {
-  color: var(--color-primary);
 }
 .tagline {
   font-size: 1.15rem;
@@ -160,22 +171,12 @@ import { Sprout, Radio, ListChecks, BookOpen } from 'lucide-vue-next'
   gap: 22px;
 }
 .feature {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border-soft);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-  padding: 26px;
+  padding: 4px 0;
 }
 .f-ic {
   display: inline-flex;
-  width: 52px;
-  height: 52px;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-md);
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  margin-bottom: 14px;
+  color: var(--color-verde-oscuro);
+  margin-bottom: 8px;
 }
 .feature h3 {
   margin: 0 0 6px;
@@ -213,9 +214,17 @@ import { Sprout, Radio, ListChecks, BookOpen } from 'lucide-vue-next'
   color: var(--color-text-soft);
   font-size: 0.88rem;
 }
-@media (max-width: 640px) {
+@media (max-width: 760px) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+    padding-top: 20px;
+  }
   .hero h1 {
-    font-size: 2.2rem;
+    font-size: 2.5rem;
+  }
+  .hero-fotos {
+    aspect-ratio: 16 / 10;
   }
 }
 </style>

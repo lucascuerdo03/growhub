@@ -147,7 +147,7 @@ async function remove() {
 .back {
   display: inline-block;
   margin-bottom: 12px;
-  color: #0284c7;
+  color: var(--color-primary);
   text-decoration: none;
   font-size: 0.9rem;
 }
@@ -185,7 +185,7 @@ textarea {
 button[type='submit'] {
   margin-top: 18px;
   padding: 12px;
-  background: #0284c7;
+  background: var(--color-primary);
   color: white;
   border: none;
   border-radius: 8px;
@@ -277,10 +277,10 @@ button[type='submit']:disabled {
 }
 .danger h3 {
   margin: 0 0 12px;
-  color: #b91c1c;
+  color: var(--color-danger);
 }
 .del {
-  background: #dc2626;
+  background: var(--color-danger);
   color: white;
   border: none;
   padding: 10px 18px;
@@ -289,15 +289,15 @@ button[type='submit']:disabled {
   cursor: pointer;
 }
 .del:hover {
-  background: #b91c1c;
+  background: var(--color-danger);
 }
 .muted {
   color: #6b7280;
 }
 .error {
-  color: #dc2626;
+  color: var(--color-danger);
 }
 .success {
-  color: #16a34a;
+  color: var(--color-success);
 }
 </style>

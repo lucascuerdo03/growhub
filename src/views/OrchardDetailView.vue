@@ -17,6 +17,8 @@
       </div>
     </section>
 
+    <TiempoHuerto v-if="huerto" class="tiempo-huerto" :huerto="huerto" :enlace-ajustes="permisos.admin" />
+
     <p v-if="error" class="error">{{ error }}</p>
     <p v-if="!listo" class="muted">Cargando…</p>
     <p v-else-if="!huerto" class="error">
@@ -45,26 +47,21 @@
           </div>
         </template>
 
-        <p v-if="!cultivosFiltrados.length" class="muted small">
-          {{ cultivos.length ? 'Sin resultados.' : 'Este huerto aún no tiene cultivos.' }}
-        </p>
+        <div v-if="!cultivos.length && !nuevo" class="vacio">
+          <Ilustracion tipo="huerto" />
+          <p>Este huerto aún no tiene cultivos. Busca uno arriba para añadirlo.</p>
+        </div>
+        <p v-else-if="!cultivosFiltrados.length" class="muted small">Ningún cultivo coincide con la búsqueda.</p>
 
-        <div v-for="c in cultivosFiltrados" :key="c.id" class="crop-card">
-          <StoredImage class="crop-thumb" :orchard-id="orchardId" :foto-id="c.fotoId" :url="c.foto" :alt="c.nombre">
-            <Leaf :size="20" />
-          </StoredImage>
-          <router-link :to="`/orchard/${orchardId}/crop/${c.id}`" class="crop-info">
-            <strong>{{ c.nombre }}</strong>
-            <span v-if="c.especie" class="pill type">{{ c.especie }}</span>
-            <div v-if="c.epocaSiembra || c.riego" class="crop-meta">
-              <span v-if="c.epocaSiembra">Siembra: {{ c.epocaSiembra }}</span>
-              <span v-if="c.riego">Riego: {{ c.riego }}</span>
-            </div>
-          </router-link>
-          <router-link :to="`/orchard/${orchardId}/crop/${c.id}`" class="chevron" title="Ver ficha">
-            <ChevronRight :size="20" />
-          </router-link>
-          <button v-if="permisos.manageCrops" class="del" title="Eliminar" @click="removeCrop(c)"><X :size="15" /></button>
+        <div class="rejilla-cultivos">
+          <CropCard
+            v-for="c in cultivosFiltrados"
+            :key="c.id"
+            :cultivo="c"
+            :orchard-id="orchardId"
+            :puede-borrar="permisos.manageCrops"
+            @remove="removeCrop"
+          />
         </div>
       </section>
 
@@ -77,11 +74,12 @@
           <select v-model="taskFrec" aria-label="Frecuencia de riego">
             <option v-for="f in FRECUENCIAS" :key="f" :value="f">{{ f }}</option>
           </select>
+          <input v-model="taskFecha" type="date" aria-label="Fecha de la tarea" />
           <select v-model="taskCrop" aria-label="Planta de la tarea">
             <option value="">General</option>
             <option v-for="c in cultivos" :key="c.id" :value="c.id">{{ c.nombre }}</option>
           </select>
-          <button type="submit" :disabled="!taskTitulo.trim()"><Plus :size="18" /></button>
+          <button type="submit" class="anadir-tarea" :disabled="!taskTitulo.trim()"><Plus :size="16" /> Añadir tarea</button>
         </form>
 
         <select v-if="cultivos.length" v-model="filtroPlanta" class="task-filter" aria-label="Filtrar por planta">
@@ -91,31 +89,37 @@
         </select>
 
         <p class="group-label">Pendientes</p>
-        <p v-if="!pendientes.length" class="muted small">No hay tareas pendientes.</p>
-        <div v-for="t in pendientes" :key="t.id" class="task-card">
-          <input type="checkbox" :checked="t.completada" :disabled="!permisos.completeTasks" @change="toggleTask(t)" />
-          <div class="task-info">
-            <strong>{{ t.titulo }}</strong>
-            <div class="tags">
-              <span class="pill plant">{{ plantaDe(t) }}</span>
-              <span v-if="t.frecuenciaRiego" class="pill water">Riego: {{ t.frecuenciaRiego }}</span>
-            </div>
-          </div>
-          <button v-if="permisos.manageTasks" class="del" title="Eliminar" @click="removeTask(t)"><X :size="15" /></button>
+        <div v-if="!pendientes.length" class="vacio compacto">
+          <Ilustracion tipo="tareas" />
+          <p>No hay tareas pendientes.</p>
         </div>
+        <TransitionGroup name="tarea-lista" tag="div">
+          <TaskItem
+            v-for="t in pendientes"
+            :key="t.id"
+            :tarea="t"
+            :planta="plantaDe(t)"
+            :puede-completar="permisos.completeTasks"
+            :puede-borrar="permisos.manageTasks"
+            @toggle="toggleTask"
+            @remove="removeTask"
+          />
+        </TransitionGroup>
 
         <button v-if="completadas.length" class="collapse" @click="showDone = !showDone">
           Completadas ({{ completadas.length }})
         </button>
         <template v-if="showDone">
-          <div v-for="t in completadas" :key="t.id" class="task-card done">
-            <input type="checkbox" checked :disabled="!permisos.completeTasks" @change="toggleTask(t)" />
-            <div class="task-info">
-              <strong>{{ t.titulo }}</strong>
-              <div class="tags"><span class="pill plant">{{ plantaDe(t) }}</span></div>
-            </div>
-            <button v-if="permisos.manageTasks" class="del" title="Eliminar" @click="removeTask(t)"><X :size="15" /></button>
-          </div>
+          <TaskItem
+            v-for="t in completadas"
+            :key="t.id"
+            :tarea="t"
+            :planta="plantaDe(t)"
+            :puede-completar="permisos.completeTasks"
+            :puede-borrar="permisos.manageTasks"
+            @toggle="toggleTask"
+            @remove="removeTask"
+          />
         </template>
       </section>
     </div>
@@ -138,10 +142,9 @@
       </form>
 
       <p v-if="errorPosts" class="muted small">El cuaderno no está disponible ahora mismo.</p>
-      <div v-else-if="!posts.length" class="empty-feed">
-        <MessageSquare :size="34" class="empty-ic" />
-        <p class="empty-title">Aún no hay publicaciones</p>
-        <p class="muted small">Comparte actualizaciones, notas o fotos de este huerto.</p>
+      <div v-else-if="!posts.length" class="vacio">
+        <Ilustracion tipo="cuaderno" />
+        <p>El cuaderno está en blanco. Anota aquí lo que pasa en el huerto o sube una foto.</p>
       </div>
 
       <article v-for="p in posts" :key="p.id" class="post">
@@ -163,7 +166,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { X, ChevronRight, Leaf, Plus, MessageSquare } from 'lucide-vue-next'
+import { X, Plus } from 'lucide-vue-next'
 import { useAuth } from '../composables/useAuth'
 import { useHuerto } from '../composables/useHuertos'
 import { useVivo } from '../composables/useVivo'
@@ -171,6 +174,11 @@ import ImageUpload from '../components/ImageUpload.vue'
 import StoredImage from '../components/StoredImage.vue'
 import UserAvatar from '../components/UserAvatar.vue'
 import BuscadorCultivo from '../components/BuscadorCultivo.vue'
+import CropCard from '../components/CropCard.vue'
+import Ilustracion from '../components/Ilustracion.vue'
+import TaskItem from '../components/TaskItem.vue'
+import TiempoHuerto from '../components/TiempoHuerto.vue'
+import { hoyISO } from '../utils/fechas'
 import FormularioCultivo from '../components/FormularioCultivo.vue'
 import { nombreRol, mensajeError } from '../utils/permissions'
 import {
@@ -207,6 +215,7 @@ const nuevo = ref(null)
 const taskTitulo = ref('')
 const taskFrec = ref('Cada 2-3 días')
 const taskCrop = ref('')
+const taskFecha = ref(hoyISO())
 const filtroPlanta = ref('')
 const showDone = ref(false)
 const nuevoPost = ref('')
@@ -225,12 +234,16 @@ const cultivosFiltrados = computed(() => {
 })
 const cultivoDe = (t) => cultivos.value.find((c) => c.id === t.cropId)
 const plantaDe = (t) => cultivoDe(t)?.nombre || 'General'
+// Primero lo más urgente; las tareas sin fecha, al final.
+const porVencimiento = (a, b) => (a.fecha || '9999').localeCompare(b.fecha || '9999')
 const tareasFiltradas = computed(() => {
   if (!filtroPlanta.value) return tareas.value
   if (filtroPlanta.value === 'general') return tareas.value.filter((t) => !cultivoDe(t))
   return tareas.value.filter((t) => t.cropId === filtroPlanta.value)
 })
-const pendientes = computed(() => tareasFiltradas.value.filter((t) => !t.completada))
+const pendientes = computed(() =>
+  tareasFiltradas.value.filter((t) => !t.completada).sort(porVencimiento),
+)
 const completadas = computed(() => tareasFiltradas.value.filter((t) => t.completada))
 
 // Al filtrar por una planta, las tareas nuevas se proponen para esa planta.
@@ -268,7 +281,12 @@ async function removeCrop(c) {
 async function addTask() {
   const titulo = taskTitulo.value.trim()
   if (!titulo) return
-  const datos = { titulo, frecuenciaRiego: taskFrec.value, cropId: taskCrop.value || null }
+  const datos = {
+    titulo,
+    frecuenciaRiego: taskFrec.value,
+    cropId: taskCrop.value || null,
+    fecha: taskFecha.value,
+  }
   error.value = ''
   taskTitulo.value = ''
   // Un filtro de otra planta ocultaría la tarea recién creada: parecería que no se
@@ -354,7 +372,7 @@ async function removePost(p) {
 .hero {
   position: relative;
   border-radius: var(--radius-md);
-  background: #0f2740;
+  background: var(--color-verde-oscuro);
   margin-bottom: 28px;
   overflow: hidden;
   box-shadow: var(--shadow-card);
@@ -365,8 +383,8 @@ async function removePost(p) {
 }
 .hero-overlay {
   position: relative;
-  padding: 40px 32px 34px;
-  background: linear-gradient(0deg, rgba(15, 23, 42, 0.78), rgba(15, 23, 42, 0.35));
+  padding: 64px 28px 24px;
+  background: linear-gradient(0deg, rgb(15 30 26 / 0.82), rgb(15 30 26 / 0.2));
 }
 .hero h1 {
   margin: 0;
@@ -397,26 +415,48 @@ async function removePost(p) {
 .hero-btn:hover {
   background: rgba(255, 255, 255, 0.3);
 }
+.tiempo-huerto {
+  margin: -14px 0 22px;
+}
+.rejilla-cultivos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 16px 14px;
+  margin-top: 12px;
+}
+.vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 8px;
+  text-align: center;
+  color: var(--color-text-soft);
+}
+.vacio p {
+  margin: 0;
+  font-size: 0.9rem;
+  max-width: 36ch;
+}
+.vacio.compacto {
+  padding-block: 8px;
+}
 .columns {
   display: grid;
-  grid-template-columns: 1.4fr 1fr;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
   gap: 24px;
   align-items: start;
 }
 .panel {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border-soft);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-  padding: 24px;
+  min-width: 0;
+}
+.notebook {
+  border-top: 1px solid var(--color-border);
+  padding-top: 24px;
 }
 .section-title {
-  margin: 0 0 16px;
-  font-size: 1.2rem;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  border-bottom: 2px solid var(--color-border-soft);
-  padding-bottom: 12px;
+  margin: 0 0 14px;
+  font-size: 1.35rem;
 }
 .search {
   width: 100%;
@@ -441,8 +481,22 @@ async function removePost(p) {
   border-radius: var(--radius-sm);
   font-size: 0.9rem;
 }
-.task-add input {
+.task-add input:first-child {
   flex: 1 1 100%;
+}
+.task-add input[type='date'],
+.task-add select {
+  flex: 1 1 125px;
+}
+.inline-add .anadir-tarea {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 .inline-add button {
   width: 40px;
@@ -464,70 +518,6 @@ async function removePost(p) {
   padding: 14px;
   margin-bottom: 14px;
 }
-.nuevo-cultivo h3 {
-  margin: 0 0 4px;
-}
-.crop-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--color-border-soft);
-  border-radius: var(--radius-md);
-  margin-bottom: 10px;
-}
-.crop-thumb {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-sm);
-  background: #e8f3ea;
-  flex-shrink: 0;
-}
-.inline-photo {
-  width: 100%;
-}
-.crop-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  margin-top: 4px;
-  font-size: 0.76rem;
-  color: var(--color-text-soft);
-}
-.crop-info {
-  flex: 1;
-  min-width: 0;
-  text-decoration: none;
-}
-.crop-info strong {
-  display: block;
-  color: var(--color-primary);
-}
-.chevron {
-  color: var(--color-text-soft);
-  font-size: 1.6rem;
-  text-decoration: none;
-  line-height: 1;
-  padding: 0 4px;
-}
-.chevron:hover {
-  color: var(--color-primary);
-}
-.pill {
-  display: inline-block;
-  font-size: 0.74rem;
-  padding: 2px 8px;
-  border-radius: 999px;
-  margin-top: 4px;
-}
-.pill.type {
-  background: #ede9fe;
-  color: #6d28d9;
-}
-.pill.plant {
-  background: #eef2f7;
-  color: #475569;
-}
 .task-filter {
   width: 100%;
   padding: 9px 11px;
@@ -535,14 +525,6 @@ async function removePost(p) {
   border-radius: var(--radius-sm);
   font-size: 0.9rem;
   margin-bottom: 8px;
-}
-.pill.water {
-  background: var(--color-primary-soft);
-  color: #0369a1;
-}
-.pill.resp {
-  background: #dcfce7;
-  color: #166534;
 }
 .hero-badge {
   display: inline-block;
@@ -571,43 +553,6 @@ async function removePost(p) {
   color: var(--color-text-soft);
   margin: 8px 0 10px;
 }
-.task-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 11px;
-  background: #f0f7ff;
-  border: 1px solid #dbeafe;
-  padding: 13px 15px;
-  border-radius: var(--radius-md);
-  margin-bottom: 10px;
-}
-.task-card.done {
-  background: #fff;
-  border-color: var(--color-border-soft);
-}
-.task-card.done .task-info strong {
-  text-decoration: line-through;
-  color: #9ca3af;
-}
-.task-card input[type='checkbox'] {
-  margin-top: 3px;
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
-}
-.task-info {
-  flex: 1;
-  min-width: 0;
-}
-.tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 4px;
-}
-.tags .pill {
-  margin-top: 0;
-}
 .collapse {
   width: 100%;
   text-align: left;
@@ -633,23 +578,6 @@ async function removePost(p) {
   border-radius: var(--radius-md);
   padding: 16px;
   margin-bottom: 20px;
-}
-.avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--color-primary);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-.avatar.sm {
-  width: 36px;
-  height: 36px;
-  font-size: 0.9rem;
 }
 .composer-body {
   flex: 1;
@@ -683,19 +611,8 @@ async function removePost(p) {
   opacity: 0.5;
   cursor: default;
 }
-.empty-feed {
-  text-align: center;
-  padding: 36px;
-  color: var(--color-text-soft);
-}
-.empty-ic {
-  color: var(--color-text-soft);
-  opacity: 0.6;
-}
-.empty-title {
-  font-weight: 700;
-  color: var(--color-text);
-  margin: 6px 0 2px;
+.nuevo-cultivo h3 {
+  margin: 0 0 4px;
 }
 .post {
   border: 1px solid var(--color-border-soft);
@@ -733,10 +650,6 @@ async function removePost(p) {
 }
 .del:hover {
   color: var(--color-danger);
-}
-.chevron {
-  display: flex;
-  align-items: center;
 }
 .muted {
   color: var(--color-text-soft);

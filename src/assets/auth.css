@@ -4,20 +4,21 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  background-color: #f4f6f8;
+  background-color: var(--color-bg);
   padding: 20px;
 }
 .auth-card {
   background: white;
   padding: 40px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
   width: 100%;
   max-width: 380px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   text-align: center;
 }
 .auth-card h1 {
   margin: 0 0 6px;
+  color: var(--color-verde-oscuro);
 }
 .auth-card .subtitle {
   color: #6b7280;
@@ -52,22 +53,22 @@
 }
 .auth-card input:focus {
   outline: none;
-  border-color: #0284c7;
+  border-color: var(--color-primary);
 }
 .auth-card .error {
-  color: #dc2626;
+  color: var(--color-danger);
   font-size: 0.85rem;
   margin: 8px 0 0;
 }
 .auth-card .success {
-  color: #16a34a;
+  color: var(--color-success);
   font-size: 0.85rem;
   margin: 8px 0 0;
 }
 .auth-card button {
   margin-top: 16px;
   padding: 12px;
-  background-color: #0284c7;
+  background-color: var(--color-primary);
   border: none;
   border-radius: 8px;
   color: white;
@@ -76,7 +77,7 @@
   cursor: pointer;
 }
 .auth-card button:hover:not(:disabled) {
-  background-color: #0369a1;
+  background-color: var(--color-primary-dark);
 }
 .auth-card button:disabled {
   opacity: 0.6;
@@ -89,7 +90,7 @@
 }
 .auth-card .foot a,
 .auth-card .link-right {
-  color: #0284c7;
+  color: var(--color-primary);
   font-weight: 600;
   text-decoration: none;
 }

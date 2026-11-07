@@ -1,32 +1,25 @@
 <template>
   <div>
-    <p v-if="!listos" class="muted center">Cargando…</p>
+    <p v-if="!listos" class="muted">Cargando…</p>
 
     <template v-else>
-      <header class="head">
-        <div>
-          <h1>Hola, {{ nombreCorto }}</h1>
-          <p class="sub">Panel de gestión de tus huertos.</p>
+      <header class="portada">
+        <StoredImage class="portada-foto" :orchard-id="fotoPortada.orchardId" :foto-id="fotoPortada.fotoId" :url="fotoPortada.url" />
+        <div class="portada-texto">
+          <p class="fecha">{{ fechaHoy }}</p>
+          <h1>Hoy en tu huerto</h1>
+          <p class="resumen">{{ resumen }}</p>
         </div>
-        <button class="btn-primary" @click="openModal">
-          <Plus :size="18" /> Nuevo huerto
-        </button>
+        <button class="btn-primary portada-accion" @click="openModal"><Plus :size="17" /> Nuevo huerto</button>
       </header>
 
-      <div class="stats">
-        <div class="stat">
-          <span class="stat-ic" style="--bg:#e0f2fe;--c:#0284c7"><Sprout :size="20" /></span>
-          <div><strong>{{ totals.huertos }}</strong><span>Huertos</span></div>
-        </div>
-        <div class="stat">
-          <span class="stat-ic" style="--bg:#dcfce7;--c:#16a34a"><Leaf :size="20" /></span>
-          <div><strong>{{ totals.cultivos }}</strong><span>Cultivos</span></div>
-        </div>
-        <div class="stat">
-          <span class="stat-ic" style="--bg:#fef3c7;--c:#d97706"><ListChecks :size="20" /></span>
-          <div><strong>{{ totals.tareasPend }}</strong><span>Tareas pendientes</span></div>
-        </div>
+      <div v-if="huertoTiempo" class="franja-tiempo">
+        <TiempoHuerto :huerto="huertoTiempo" />
+        <select v-if="conPin.length > 1" id="tiempo-huerto" v-model="idTiempo" aria-label="Huerto del que ver el tiempo">
+          <option v-for="h in conPin" :key="h.id" :value="h.id">{{ h.nombre }}</option>
+        </select>
       </div>
+      <TiempoHuerto v-else-if="primerEditable" :huerto="primerEditable" enlace-ajustes class="franja-tiempo" />
 
       <p v-if="error" class="error">{{ error }}</p>
 
@@ -35,81 +28,128 @@
           Tienes {{ invitaciones.length }}
           {{ invitaciones.length === 1 ? 'invitación pendiente' : 'invitaciones pendientes' }}.
         </span>
-        <router-link to="/invitations" class="btn-outline">Ver invitaciones</router-link>
+        <router-link to="/invitations">Ver invitaciones</router-link>
       </div>
 
-      <h2 class="section-title">Mis huertos</h2>
-
-      <div v-if="!propios.length" class="empty">
-        <Sprout :size="40" class="empty-ic" />
-        <h3>No tienes huertos todavía</h3>
-        <p>Crea tu primer huerto para empezar a gestionar cultivos, sensores y tareas.</p>
-        <button class="btn-primary" @click="openModal"><Plus :size="18" /> Crear huerto</button>
+      <div v-if="!lista.length" class="vacio-inicio">
+        <Ilustracion tipo="huerto" />
+        <h2>Crea tu primer huerto</h2>
+        <p>Añade tus cultivos y aquí verás cada día qué toca hacer, qué está a punto de cosecharse y qué sembrar.</p>
+        <button class="btn-primary" @click="openModal"><Plus :size="17" /> Crear huerto</button>
       </div>
 
-      <div v-else class="grid">
-        <div v-for="h in propios" :key="h.id" class="card">
-          <div class="card-media">
-            <StoredImage class="card-img" :orchard-id="h.id" :foto-id="h.fotoId" :url="h.imagen" :alt="h.nombre">
-              <Sprout :size="30" class="media-ic" />
-            </StoredImage>
-            <button class="del" title="Eliminar" @click="remove(h.id)"><X :size="15" /></button>
+      <div v-else class="columnas">
+        <section class="tareas" aria-labelledby="t-tareas">
+          <div class="titulo-seccion">
+            <h2 id="t-tareas">Tareas de hoy</h2>
+            <router-link to="/tasks">Ver todas</router-link>
           </div>
-          <div class="card-body">
-            <span class="role">{{ nombreRol(rolEn(h, user.uid)) }}</span>
-            <h3>{{ h.nombre }}</h3>
-            <p class="loc">{{ h.descripcion || 'Sin ubicación' }}</p>
-            <div class="meta">
-              <span>{{ h.nCultivos }} cultivos</span>
-              <span>{{ h.nTareasPend }} tareas</span>
+          <TransitionGroup v-if="deHoy.length" name="tarea-lista" tag="div" class="lista-tareas">
+            <TaskItem
+              v-for="t in deHoy"
+              :key="t.orchardId + t.id"
+              :tarea="t"
+              :planta="plantaDe(t)"
+              :huerto="t.huerto"
+              :puede-completar="permisosDe(t).completeTasks"
+              @toggle="completar"
+            />
+          </TransitionGroup>
+          <div v-else class="vacio-seccion">
+            <Ilustracion tipo="tareas" />
+            <p>Nada pendiente para hoy.<template v-if="proximaTarea"> La próxima: {{ proximaTarea.titulo }}, {{ textoVencimiento(proximaTarea.fecha).toLowerCase() }}.</template></p>
+          </div>
+          <p v-if="sinFecha" class="pie-seccion">
+            <router-link to="/tasks">{{ sinFecha }} {{ sinFecha === 1 ? 'tarea' : 'tareas' }} sin fecha</router-link>
+          </p>
+
+          <div class="titulo-seccion separado"><h2>Próximas cosechas</h2></div>
+          <ul v-if="cosechas.length" class="cosechas">
+            <li v-for="c in cosechas" :key="c.orchardId + c.id">
+              <router-link :to="`/orchard/${c.orchardId}/crop/${c.id}`" class="cosecha">
+                <StoredImage class="cosecha-foto" :orchard-id="c.orchardId" :foto-id="c.fotoId" :url="c.foto"><Leaf :size="18" /></StoredImage>
+                <div class="cosecha-datos">
+                  <div class="cosecha-linea">
+                    <strong>{{ c.nombre }}</strong>
+                    <span :class="{ listo: c.estado.etapa === 'listo' }">{{ c.estado.texto }}</span>
+                  </div>
+                  <div class="barra" role="progressbar" :aria-valuenow="c.estado.pct" aria-valuemin="0" aria-valuemax="100" :aria-label="`Progreso de ${c.nombre}`">
+                    <i :class="c.estado.etapa" :style="{ width: `${c.estado.pct}%` }"></i>
+                  </div>
+                </div>
+              </router-link>
+            </li>
+          </ul>
+          <p v-else class="muted small">Indica la fecha de siembra de tus cultivos para ver aquí cuánto les falta.</p>
+        </section>
+
+        <aside class="lateral">
+          <section v-if="lecturas.length" aria-labelledby="t-sensores">
+            <div class="titulo-seccion">
+              <h2 id="t-sensores">Últimas lecturas</h2>
+              <router-link to="/sensors">Ver sensores</router-link>
             </div>
-            <router-link :to="`/orchard/${h.id}`" class="btn-outline">Abrir huerto</router-link>
-          </div>
-        </div>
+            <ul class="lecturas">
+              <li v-for="l in lecturas" :key="l.clave">
+                <component :is="SENSOR_TYPES[l.tipo]?.icon" :size="18" :style="{ color: SENSOR_TYPES[l.tipo]?.color }" />
+                <div class="lectura-nombre">
+                  <span>{{ l.nombre }}</span>
+                  <small>{{ l.lugar }} · {{ l.hace }}</small>
+                </div>
+                <strong>{{ l.valor }}&nbsp;<small>{{ l.unidad }}</small></strong>
+              </li>
+            </ul>
+          </section>
 
-        <button class="add-card" @click="openModal">
-          <Plus :size="26" />
-          <span>Nuevo huerto</span>
-        </button>
+          <section aria-labelledby="t-sembrar">
+            <div class="titulo-seccion">
+              <h2 id="t-sembrar">Qué sembrar en {{ MESES_LARGOS[mes - 1] }}</h2>
+              <router-link to="/biblioteca?mes=1">Ver todo</router-link>
+            </div>
+            <ul class="sembrar">
+              <li v-for="c in paraSembrar" :key="c.id">
+                <router-link :to="`/biblioteca/${c.id}`">
+                  <img :src="c.foto" :alt="c.nombre" loading="lazy" width="800" height="600" />
+                  <span>{{ c.nombre }}</span>
+                </router-link>
+              </li>
+            </ul>
+          </section>
+        </aside>
       </div>
 
-      <template v-if="compartidos.length">
-        <h2 class="section-title shared">Compartidos conmigo</h2>
-        <div class="grid">
-          <div v-for="h in compartidos" :key="h.id" class="card">
-            <div class="card-media">
-              <StoredImage class="card-img" :orchard-id="h.id" :foto-id="h.fotoId" :url="h.imagen" :alt="h.nombre">
-                <Sprout :size="30" class="media-ic" />
+      <template v-if="lista.length">
+        <div class="titulo-seccion separado"><h2>Mis huertos</h2></div>
+        <div class="huertos">
+          <article v-for="h in huertos" :key="h.id" class="huerto">
+            <router-link :to="`/orchard/${h.id}`" class="huerto-enlace">
+              <StoredImage class="huerto-foto" :orchard-id="h.id" :foto-id="h.fotoId" :url="h.imagen" :alt="h.nombre">
+                <Sprout :size="30" />
               </StoredImage>
-            </div>
-            <div class="card-body">
-              <span class="role">{{ nombreRol(rolEn(h, user.uid)) }}</span>
-              <h3>{{ h.nombre }}</h3>
-              <p class="loc">{{ h.descripcion || 'Sin ubicación' }}</p>
-              <div class="meta">
-                <span>{{ h.nCultivos }} cultivos</span>
-                <span>{{ h.nTareasPend }} tareas</span>
+              <div class="huerto-datos">
+                <strong>{{ h.nombre }}</strong>
+                <span>{{ h.nCultivos }} {{ h.nCultivos === 1 ? 'cultivo' : 'cultivos' }} · {{ h.nTareasPend }} {{ h.nTareasPend === 1 ? 'tarea' : 'tareas' }}<template v-if="h.ownerId !== user.uid"> · {{ nombreRol(rolEn(h, user.uid)) }}</template></span>
               </div>
-              <router-link :to="`/orchard/${h.id}`" class="btn-outline">Abrir huerto</router-link>
-            </div>
-          </div>
+            </router-link>
+            <button v-if="h.ownerId === user.uid" class="del" :aria-label="`Eliminar ${h.nombre}`" @click="remove(h.id)"><X :size="14" /></button>
+          </article>
         </div>
       </template>
     </template>
 
     <BaseModal v-if="showModal" title="Nuevo huerto" @close="closeModal">
       <form id="orchard-form" @submit.prevent="add">
-        <label>Nombre del huerto</label>
-        <input v-model="nombre" placeholder="Ej: Invernadero Tomates" autofocus />
+        <label for="h-nombre">Nombre del huerto</label>
+        <input id="h-nombre" v-model="nombre" placeholder="Ej: Invernadero Tomates" autofocus />
 
-        <label>Ubicación</label>
-        <input v-model="descripcion" placeholder="Ej: Finca Sur, Salamanca" />
+        <label for="h-lugar">Ubicación</label>
+        <input id="h-lugar" v-model="descripcion" placeholder="Ej: Finca Sur, Salamanca" />
 
         <label>Foto (opcional)</label>
         <ImageUpload v-model="foto" />
 
         <label>Ubicación en el mapa (opcional)</label>
-        <p class="hint">Haz clic en el mapa para marcar la ubicación exacta.</p>
+        <p class="hint">Haz clic en el mapa. Sirve para mostrar el tiempo y la lluvia prevista.</p>
         <LocationMap :lat="lat" :lng="lng" editable @update="onPick" />
         <p v-if="lat != null" class="coords">Coordenadas: {{ lat.toFixed(5) }}, {{ lng.toFixed(5) }}</p>
 
@@ -127,47 +167,190 @@
 </template>
 
 <script setup>
-import { ref, computed, defineAsyncComponent } from 'vue'
-import { Plus, Sprout, Leaf, ListChecks, X } from 'lucide-vue-next'
+import { computed, defineAsyncComponent, ref } from 'vue'
+import { Leaf, Plus, Sprout, X } from 'lucide-vue-next'
 import { useAuth } from '../composables/useAuth'
 import { useInvitaciones } from '../composables/useInvitaciones'
 import { useHuertos, usePorHuerto } from '../composables/useHuertos'
-import { nombreRol, rolEn } from '../utils/permissions'
+import { useVivoMuchos } from '../composables/useVivo'
 import BaseModal from '../components/BaseModal.vue'
+import Ilustracion from '../components/Ilustracion.vue'
 import ImageUpload from '../components/ImageUpload.vue'
 import StoredImage from '../components/StoredImage.vue'
-const LocationMap = defineAsyncComponent(() => import('../components/LocationMap.vue'))
+import TaskItem from '../components/TaskItem.vue'
+import TiempoHuerto from '../components/TiempoHuerto.vue'
+import { CROPS_LIBRARY, MESES_LARGOS, entradaDeCultivo, sePuedeSembrar } from '../data/cropsLibrary'
+import { estadoCultivo } from '../utils/cultivos'
+import { hoyISO, mesActual, textoVencimiento } from '../utils/fechas'
+import { mensajeError, nombreRol, permisosEn, rolEn } from '../utils/permissions'
+import { SENSOR_TYPES } from '../utils/sensorTypes'
 import {
-  fuenteCultivos,
-  fuenteTareas,
-  createHuerto,
-  updateHuerto,
-  deleteHuerto,
+  autopublicarTarea,
   createFoto,
+  createHuerto,
+  deleteHuerto,
+  fuenteCultivos,
+  fuenteLecturas,
+  fuenteSensores,
+  fuenteTareas,
+  updateHuerto,
+  updateTarea,
 } from '../services/firestoreService'
+
+const LocationMap = defineAsyncComponent(() => import('../components/LocationMap.vue'))
 
 const { user } = useAuth()
 const { invitaciones } = useInvitaciones()
 const { huertos: lista, listos } = useHuertos()
 const { porHuerto: cultivos } = usePorHuerto(fuenteCultivos)
-const { porHuerto: tareas } = usePorHuerto(fuenteTareas)
+const { porHuerto: tareasPorHuerto } = usePorHuerto(fuenteTareas)
+const { porHuerto: sensoresPorHuerto } = usePorHuerto(fuenteSensores)
+
+const hoy = hoyISO()
+const mes = mesActual()
+const fechaHoy = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })
+const error = ref('')
 
 const huertos = computed(() =>
   lista.value.map((h) => ({
     ...h,
     nCultivos: (cultivos.value[h.id] || []).length,
-    nTareasPend: (tareas.value[h.id] || []).filter((t) => !t.completada).length,
+    nTareasPend: (tareasPorHuerto.value[h.id] || []).filter((t) => !t.completada).length,
   })),
 )
-const propios = computed(() => huertos.value.filter((h) => h.ownerId === user.value.uid))
-const compartidos = computed(() => huertos.value.filter((h) => h.ownerId !== user.value.uid))
-const totals = computed(() => ({
-  huertos: huertos.value.length,
-  cultivos: huertos.value.reduce((n, h) => n + h.nCultivos, 0),
-  tareasPend: huertos.value.reduce((n, h) => n + h.nTareasPend, 0),
-}))
-const error = ref('')
 
+/* --- Tareas --- */
+const pendientes = computed(() =>
+  lista.value.flatMap((h) =>
+    (tareasPorHuerto.value[h.id] || [])
+      .filter((t) => !t.completada)
+      .map((t) => ({ ...t, orchardId: h.id, huerto: lista.value.length > 1 ? h : null, huertoReal: h })),
+  ),
+)
+const deHoy = computed(() =>
+  pendientes.value
+    .filter((t) => t.fecha && t.fecha <= hoy)
+    .sort((a, b) => a.fecha.localeCompare(b.fecha)),
+)
+const atrasadas = computed(() => deHoy.value.filter((t) => t.fecha < hoy).length)
+const sinFecha = computed(() => pendientes.value.filter((t) => !t.fecha).length)
+const proximaTarea = computed(
+  () =>
+    pendientes.value
+      .filter((t) => t.fecha && t.fecha > hoy)
+      .sort((a, b) => a.fecha.localeCompare(b.fecha))[0] || null,
+)
+const permisosDe = (t) => permisosEn(t.huertoReal, user.value.uid)
+const plantaDe = (t) => (cultivos.value[t.orchardId] || []).find((c) => c.id === t.cropId)?.nombre || ''
+
+const resumen = computed(() => {
+  if (!lista.value.length) return 'Todavía no tienes ningún huerto.'
+  const n = deHoy.value.length - atrasadas.value
+  const partes = []
+  if (n) partes.push(`${n} ${n === 1 ? 'tarea para hoy' : 'tareas para hoy'}`)
+  if (atrasadas.value) partes.push(`${atrasadas.value} ${atrasadas.value === 1 ? 'atrasada' : 'atrasadas'}`)
+  return partes.length ? partes.join(' y ') : 'Sin tareas pendientes para hoy'
+})
+
+async function completar(t) {
+  error.value = ''
+  try {
+    await updateTarea(t.orchardId, t.id, { completada: true })
+  } catch (e) {
+    error.value = mensajeError(e, 'No se pudo completar la tarea.')
+    console.error(e)
+    return
+  }
+  if (permisosDe(t).publishPosts) await autopublicarTarea(t.orchardId, t.titulo, user.value)
+}
+
+/* --- Cosechas --- */
+const conEstado = computed(() =>
+  lista.value.flatMap((h) =>
+    (cultivos.value[h.id] || []).map((c) => ({ ...c, orchardId: h.id, estado: estadoCultivo(c) })),
+  ),
+)
+const cosechas = computed(() =>
+  conEstado.value
+    .filter((c) => c.estado.pct !== null)
+    .sort((a, b) => (a.estado.restantes === b.estado.restantes ? 0 : a.estado.restantes - b.estado.restantes))
+    .slice(0, 5),
+)
+
+/* --- Lecturas --- */
+const sensores = computed(() =>
+  lista.value.flatMap((h) =>
+    (sensoresPorHuerto.value[h.id] || []).map((s) => ({ ...s, orchardId: h.id, orchardNombre: h.nombre })),
+  ),
+)
+const { porClave: lecturasPorClave } = useVivoMuchos(() =>
+  sensores.value.map((s) => fuenteLecturas(s.orchardId, s.id)),
+)
+function hace(ts) {
+  const min = Math.max(0, Math.round((Date.now() - ts.toMillis()) / 60000))
+  if (min < 1) return 'ahora'
+  if (min < 60) return `hace ${min} min`
+  const h = Math.round(min / 60)
+  if (h < 24) return `hace ${h} h`
+  return `hace ${Math.round(h / 24)} d`
+}
+const lecturas = computed(() =>
+  sensores.value
+    .map((s) => {
+      const clave = fuenteLecturas(s.orchardId, s.id).clave
+      const ultima = (lecturasPorClave.value[clave] || []).at(-1)
+      if (!ultima?.createdAt) return null
+      const planta = (cultivos.value[s.orchardId] || []).find((c) => c.id === s.cropId)?.nombre
+      return {
+        clave,
+        tipo: s.tipo,
+        nombre: s.nombre,
+        unidad: s.unidad,
+        valor: ultima.valor,
+        lugar: planta || s.orchardNombre,
+        cuando: ultima.createdAt.toMillis(),
+        hace: hace(ultima.createdAt),
+      }
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.cuando - a.cuando)
+    .slice(0, 5),
+)
+
+/* --- Qué sembrar --- */
+const paraSembrar = computed(() => {
+  const yaTengo = new Set(conEstado.value.map((c) => entradaDeCultivo(c)?.especieId))
+  const orden = { Fácil: 0, Media: 1, Difícil: 2 }
+  const vistas = new Set()
+  return CROPS_LIBRARY.filter((c) => sePuedeSembrar(c, mes))
+    .sort((a, b) => orden[a.dificultad] - orden[b.dificultad])
+    .filter((c) => {
+      // Una variedad por especie y, antes que nada, lo que aún no se cultiva.
+      if (vistas.has(c.especieId) || yaTengo.has(c.especieId)) return false
+      vistas.add(c.especieId)
+      return true
+    })
+    .slice(0, 6)
+})
+
+/* --- Portada y tiempo --- */
+const fotoPortada = computed(() => {
+  const h = lista.value.find((x) => x.fotoId || x.imagen)
+  if (h) return { orchardId: h.id, fotoId: h.fotoId || '', url: h.imagen || '' }
+  const c = conEstado.value.find((x) => x.fotoId || x.foto)
+  if (c) return { orchardId: c.orchardId, fotoId: c.fotoId || '', url: c.foto || '' }
+  return { orchardId: '', fotoId: '', url: paraSembrar.value[0]?.foto || '' }
+})
+const conPin = computed(() => lista.value.filter((h) => h.lat != null))
+const idTiempo = ref(null)
+const huertoTiempo = computed(
+  () => conPin.value.find((h) => h.id === idTiempo.value) || conPin.value[0] || null,
+)
+const primerEditable = computed(
+  () => lista.value.find((h) => permisosEn(h, user.value.uid).admin) || null,
+)
+
+/* --- Nuevo huerto --- */
 const showModal = ref(false)
 const nombre = ref('')
 const descripcion = ref('')
@@ -176,11 +359,6 @@ const lat = ref(null)
 const lng = ref(null)
 const saving = ref(false)
 const modalError = ref('')
-
-const nombreCorto = computed(() => {
-  const n = user.value?.displayName || user.value?.email || 'usuario'
-  return n.split(' ')[0].split('@')[0]
-})
 
 function onPick({ lat: la, lng: ln }) {
   lat.value = la
@@ -242,200 +420,327 @@ async function remove(id) {
     console.error(e)
   }
 }
-
 </script>
 
 <style scoped>
-.head {
+.portada {
+  position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 26px;
   flex-wrap: wrap;
-}
-.head h1 {
-  margin: 0;
-  font-size: 1.7rem;
-}
-.sub {
-  color: var(--color-text-soft);
-  margin: 4px 0 0;
-}
-.stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 16px;
-  margin-bottom: 30px;
-}
-.stat {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  min-height: 190px;
+  padding: 22px 24px;
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-card);
-  padding: 18px 20px;
-}
-.stat-ic {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: var(--c);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.stat div {
-  display: flex;
-  flex-direction: column;
-}
-.stat strong {
-  font-size: 1.6rem;
-  line-height: 1;
-}
-.stat span {
-  font-size: 0.82rem;
-  color: var(--color-text-soft);
-}
-.section-title {
-  margin: 0 0 18px;
-  font-size: 1.2rem;
-}
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 20px;
-}
-.card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-card);
   overflow: hidden;
-  transition: box-shadow 0.15s;
+  background: var(--color-verde-oscuro);
 }
-.card:hover {
-  box-shadow: var(--shadow-elevated);
+.portada-foto {
+  position: absolute;
+  inset: 0;
 }
-.card-media {
+.portada::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(0deg, rgb(15 30 26 / 0.85), rgb(15 30 26 / 0.35));
+}
+.portada-texto,
+.portada-accion {
   position: relative;
-  height: 110px;
-  background: #eef4fb;
-  color: var(--color-primary);
+  z-index: 1;
 }
-.card-img {
-  width: 100%;
-  height: 100%;
+.fecha {
+  margin: 0;
+  color: #eef3ec;
+  font-size: 0.9rem;
 }
-.media-ic {
-  opacity: 0.6;
+.fecha::first-letter {
+  text-transform: uppercase;
 }
-.card-body {
-  padding: 18px;
+.portada h1 {
+  margin: 0;
+  color: #fff;
+  font-size: 2.4rem;
 }
-.role {
-  display: inline-block;
-  background: var(--color-primary-soft);
-  color: var(--color-primary-dark);
-  font-size: 0.74rem;
-  font-weight: 600;
-  padding: 2px 9px;
-  border-radius: 999px;
-  margin-bottom: 8px;
+.resumen {
+  margin: 2px 0 0;
+  color: #eef3ec;
+}
+.franja-tiempo {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+.franja-tiempo > :first-child {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.franja-tiempo select {
+  padding: 8px 10px;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-size: 0.86rem;
 }
 .notice {
   display: flex;
-  align-items: center;
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+  margin-top: 12px;
+  padding: 11px 16px;
+  border-radius: var(--radius-sm);
   background: var(--color-primary-soft);
-  border: 1px solid var(--color-primary-border);
-  border-radius: var(--radius-md);
-  padding: 12px 18px;
-  margin-bottom: 26px;
 }
-.section-title.shared {
-  margin-top: 34px;
+.notice a {
+  font-weight: 600;
+  text-decoration: none;
 }
-.card-body h3 {
-  margin: 0 0 4px;
-  font-size: 1.1rem;
-}
-.loc {
-  color: var(--color-text-soft);
-  margin: 0 0 12px;
-  font-size: 0.9rem;
-}
-.meta {
+.vacio-inicio {
   display: flex;
-  gap: 14px;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 48px 16px;
+  text-align: center;
+}
+.vacio-inicio h2 {
+  margin: 8px 0 0;
+  font-size: 1.5rem;
+}
+.vacio-inicio p {
+  max-width: 46ch;
+  margin: 0 0 10px;
+  color: var(--color-text-soft);
+}
+.columnas {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 44px;
+  align-items: start;
+  margin-top: 28px;
+}
+.titulo-seccion {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.titulo-seccion.separado {
+  margin-top: 36px;
+}
+.titulo-seccion h2 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+.titulo-seccion a,
+.pie-seccion a {
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+.pie-seccion {
+  margin: 8px 0 0;
+}
+.lista-tareas :deep(.tarea:first-child) {
+  border-top: none;
+}
+.vacio-seccion {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 0;
+}
+.vacio-seccion p {
+  flex: 1 1 200px;
+  margin: 0;
+  color: var(--color-text-soft);
+}
+.cosechas,
+.lecturas,
+.sembrar {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cosecha {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  color: inherit;
+  text-decoration: none;
+}
+.cosecha-foto {
+  width: 58px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 5px;
+  background: var(--color-tierra-suave);
+  color: var(--color-tierra-oscuro);
+}
+.cosecha-datos {
+  flex: 1;
+  min-width: 0;
+}
+.cosecha-linea {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 10px;
+  margin-bottom: 4px;
+}
+.cosecha:hover strong {
+  color: var(--color-primary);
+}
+.cosecha-linea span {
+  font-size: 0.8rem;
+  color: var(--color-text-soft);
+}
+.cosecha-linea span.listo {
+  color: var(--color-verde-oscuro);
+  font-weight: 600;
+}
+.barra {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-tierra-suave);
+  overflow: hidden;
+}
+.barra i {
+  display: block;
+  height: 100%;
+  background: var(--color-verde);
+}
+.barra i.sembrado {
+  background: var(--color-tierra);
+}
+.barra i.listo {
+  background: var(--color-verde-oscuro);
+}
+.lateral {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  min-width: 0;
+}
+.lecturas li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--color-border);
+}
+.lecturas li:first-child {
+  border-top: none;
+}
+.lectura-nombre {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.lectura-nombre small {
+  color: var(--color-text-soft);
+  font-size: 0.76rem;
+}
+.lecturas strong {
+  font-family: var(--font-titulos);
+  font-size: 1.2rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.lecturas strong small {
+  font-family: var(--font-texto);
+  font-size: 0.74rem;
+  font-weight: 400;
+  color: var(--color-text-soft);
+}
+.sembrar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 10px;
+}
+.sembrar a {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: inherit;
+  text-decoration: none;
+  font-size: 0.8rem;
+  line-height: 1.25;
+}
+.sembrar a:hover {
+  color: var(--color-primary);
+}
+.sembrar img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 5px;
+  background: var(--color-tierra-suave);
+}
+.huertos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 20px 18px;
+}
+.huerto {
+  position: relative;
+  min-width: 0;
+}
+.huerto-enlace {
+  display: flex;
+  flex-direction: column;
+  color: inherit;
+  text-decoration: none;
+}
+.huerto-foto {
+  aspect-ratio: 16 / 10;
+  border-radius: var(--radius-sm);
+  background: var(--color-tierra-suave);
+  color: var(--color-tierra-oscuro);
+}
+.huerto-datos {
+  display: flex;
+  flex-direction: column;
+  padding-top: 8px;
+}
+.huerto-datos strong {
+  font-family: var(--font-titulos);
+  font-size: 1.15rem;
+}
+.huerto-enlace:hover strong {
+  color: var(--color-primary);
+}
+.huerto-datos span {
   font-size: 0.82rem;
   color: var(--color-text-soft);
-  margin-bottom: 14px;
 }
 .del {
   position: absolute;
-  top: 10px;
-  right: 10px;
+  top: 8px;
+  right: 8px;
   display: flex;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid var(--color-border);
+  padding: 5px;
+  border: none;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.88);
   color: var(--color-text-soft);
-  width: 26px;
-  height: 26px;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 .del:hover {
   color: var(--color-danger);
-  border-color: var(--color-danger);
 }
-.add-card {
-  border: 1px dashed var(--color-input-border);
-  background: transparent;
-  border-radius: var(--radius-md);
-  min-height: 240px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--color-text-soft);
-  font-size: 0.95rem;
-  font-weight: 500;
-  cursor: pointer;
-}
-.add-card:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-}
-.empty {
-  text-align: center;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-card);
-  padding: 50px 32px;
-}
-.empty-ic {
-  color: var(--color-primary);
-  opacity: 0.7;
-}
-.empty h3 {
-  margin: 14px 0 6px;
-  font-size: 1.25rem;
-}
-.empty p {
-  color: var(--color-text-soft);
-  margin: 0 0 20px;
-}
-/* Botones */
 .btn-primary {
   display: inline-flex;
   align-items: center;
@@ -443,7 +748,7 @@ async function remove(id) {
   background: var(--color-primary);
   color: #fff;
   border: none;
-  padding: 10px 18px;
+  padding: 10px 16px;
   border-radius: var(--radius-sm);
   font-weight: 600;
   font-size: 0.92rem;
@@ -456,20 +761,6 @@ async function remove(id) {
   opacity: 0.55;
   cursor: default;
 }
-.btn-outline {
-  display: inline-block;
-  border: 1px solid var(--color-primary);
-  color: var(--color-primary);
-  padding: 9px 16px;
-  border-radius: var(--radius-sm);
-  font-weight: 600;
-  font-size: 0.88rem;
-  text-decoration: none;
-}
-.btn-outline:hover {
-  background: var(--color-primary);
-  color: #fff;
-}
 .btn-ghost {
   background: transparent;
   border: none;
@@ -478,7 +769,6 @@ async function remove(id) {
   cursor: pointer;
   padding: 10px 14px;
 }
-/* Modal form */
 label {
   display: block;
   font-weight: 600;
@@ -513,11 +803,26 @@ input:focus {
 .muted {
   color: var(--color-text-soft);
 }
-.center {
-  text-align: center;
+.small {
+  font-size: 0.88rem;
 }
 .error {
   color: var(--color-danger);
-  margin: 8px 0;
+  margin: 10px 0 0;
+}
+@media (max-width: 860px) {
+  .columnas {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 32px;
+  }
+}
+@media (max-width: 520px) {
+  .portada h1 {
+    font-size: 1.9rem;
+  }
+  .portada {
+    padding: 16px;
+    min-height: 170px;
+  }
 }
 </style>

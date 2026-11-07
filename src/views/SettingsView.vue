@@ -131,7 +131,7 @@ async function remove(h) {
 }
 .btn-soft {
   background: var(--color-primary-soft);
-  color: #0369a1;
+  color: var(--color-primary-dark);
   border: 1px solid var(--color-primary-border);
   padding: 8px 14px;
   border-radius: var(--radius-sm);
@@ -141,7 +141,7 @@ async function remove(h) {
   cursor: pointer;
 }
 .btn-soft:hover {
-  background: #bae6fd;
+  background: var(--color-primary-border);
 }
 .btn-danger {
   background: #fdf2f2;
