@@ -31,12 +31,14 @@
         <li v-for="h in huertos" :key="h.id">
           <div class="o-info">
             <strong>{{ h.nombre }}</strong>
-            <span v-if="h.lat != null" class="muted small">Ubicación definida</span>
-            <span v-else class="muted small">Sin ubicación</span>
+            <span class="muted small">
+              {{ nombreRol(rolEn(h, user.uid)) }} · {{ h.lat != null ? 'Ubicación definida' : 'Sin ubicación' }}
+            </span>
           </div>
           <div class="o-actions">
-            <router-link :to="`/orchard/${h.id}/settings`" class="btn-soft">Ajustes</router-link>
-            <button class="btn-danger" @click="remove(h)">Eliminar</button>
+            <router-link v-if="permisosEn(h, user.uid).admin" :to="`/orchard/${h.id}/settings`" class="btn-soft">Ajustes</router-link>
+            <router-link :to="`/orchard/${h.id}/members`" class="btn-soft">Miembros</router-link>
+            <button v-if="permisosEn(h, user.uid).propietario" class="btn-danger" @click="remove(h)">Eliminar</button>
           </div>
         </li>
       </ul>
@@ -50,6 +52,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useAuth } from '../composables/useAuth'
 import { getHuertos, deleteHuerto } from '../services/firestoreService'
+import { nombreRol, rolEn, permisosEn } from '../utils/permissions'
 
 const { user } = useAuth()
 const huertos = ref([])

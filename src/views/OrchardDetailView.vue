@@ -6,11 +6,13 @@
     <section class="hero">
       <StoredImage v-if="huerto?.fotoId || huerto?.imagen" class="hero-img" :orchard-id="orchardId" :foto-id="huerto.fotoId" :url="huerto.imagen" />
       <div class="hero-overlay">
+        <span v-if="permisos.rol" class="hero-badge">{{ nombreRol(permisos.rol) }}</span>
         <h1>{{ huerto?.nombre || 'Huerto' }}</h1>
         <p v-if="huerto?.descripcion" class="hero-loc">{{ huerto.descripcion }}</p>
         <div class="hero-actions">
           <router-link :to="`/orchard/${orchardId}/sensors`" class="hero-btn">Sensores</router-link>
-          <router-link :to="`/orchard/${orchardId}/settings`" class="hero-btn">Ajustes</router-link>
+          <router-link v-if="huerto" :to="`/orchard/${orchardId}/members`" class="hero-btn">Miembros</router-link>
+          <router-link v-if="permisos.admin" :to="`/orchard/${orchardId}/settings`" class="hero-btn">Ajustes</router-link>
         </div>
       </div>
     </section>
@@ -18,14 +20,14 @@
     <p v-if="error" class="error">{{ error }}</p>
     <p v-if="loading" class="muted">Cargando…</p>
 
-    <div v-else class="columns">
+    <div v-else-if="huerto" class="columns">
       <!-- CULTIVOS -->
       <section class="panel">
         <h2 class="section-title">Cultivos</h2>
 
         <input v-model="search" class="search" placeholder="Buscar por nombre o especie…" />
 
-        <form class="inline-add" @submit.prevent="addCrop">
+        <form v-if="permisos.manageCrops" class="inline-add" @submit.prevent="addCrop">
           <input v-model="cropNombre" placeholder="Nuevo cultivo" />
           <input v-model="cropEspecie" placeholder="Especie (opcional)" />
           <button type="submit" :disabled="!cropNombre.trim() || guardandoCultivo">+</button>
@@ -51,7 +53,7 @@
           <router-link :to="`/orchard/${orchardId}/crop/${c.id}`" class="chevron" title="Ver ficha">
             <ChevronRight :size="20" />
           </router-link>
-          <button class="del" title="Eliminar" @click="removeCrop(c)"><X :size="15" /></button>
+          <button v-if="permisos.manageCrops" class="del" title="Eliminar" @click="removeCrop(c)"><X :size="15" /></button>
         </div>
       </section>
 
@@ -59,7 +61,7 @@
       <section class="panel">
         <h2 class="section-title">Tareas</h2>
 
-        <form class="inline-add" @submit.prevent="addTask">
+        <form v-if="permisos.manageTasks" class="inline-add" @submit.prevent="addTask">
           <input v-model="taskTitulo" placeholder="Nueva tarea" />
           <select v-model="taskFrec">
             <option v-for="f in FRECUENCIAS" :key="f" :value="f">{{ f }}</option>
@@ -70,14 +72,14 @@
         <p class="group-label">Pendientes</p>
         <p v-if="!pendientes.length" class="muted small">No hay tareas pendientes.</p>
         <div v-for="t in pendientes" :key="t.id" class="task-card">
-          <input type="checkbox" :checked="t.completada" @change="toggleTask(t)" />
+          <input type="checkbox" :checked="t.completada" :disabled="!permisos.completeTasks" @change="toggleTask(t)" />
           <div class="task-info">
             <strong>{{ t.titulo }}</strong>
             <div v-if="t.frecuenciaRiego" class="tags">
               <span class="pill water">Riego: {{ t.frecuenciaRiego }}</span>
             </div>
           </div>
-          <button class="del" @click="removeTask(t)"><X :size="15" /></button>
+          <button v-if="permisos.manageTasks" class="del" @click="removeTask(t)"><X :size="15" /></button>
         </div>
 
         <button v-if="completadas.length" class="collapse" @click="showDone = !showDone">
@@ -85,19 +87,19 @@
         </button>
         <template v-if="showDone">
           <div v-for="t in completadas" :key="t.id" class="task-card done">
-            <input type="checkbox" checked @change="toggleTask(t)" />
+            <input type="checkbox" checked :disabled="!permisos.completeTasks" @change="toggleTask(t)" />
             <div class="task-info"><strong>{{ t.titulo }}</strong></div>
-            <button class="del" @click="removeTask(t)"><X :size="15" /></button>
+            <button v-if="permisos.manageTasks" class="del" @click="removeTask(t)"><X :size="15" /></button>
           </div>
         </template>
       </section>
     </div>
 
     <!-- CUADERNO DE CAMPO -->
-    <section v-if="!loading" class="panel notebook">
+    <section v-if="!loading && huerto" class="panel notebook">
       <h2 class="section-title">Cuaderno de campo</h2>
 
-      <form class="composer" @submit.prevent="publicar">
+      <form v-if="permisos.publishPosts" class="composer" @submit.prevent="publicar">
         <span class="avatar">{{ inicial }}</span>
         <div class="composer-body">
           <textarea v-model="nuevoPost" rows="2" placeholder="¿Qué está pasando en el huerto?"></textarea>
@@ -123,7 +125,7 @@
             <strong>{{ p.autorNombre || 'Usuario' }}</strong>
             <span class="post-time">{{ fecha(p.createdAt) }}</span>
           </div>
-          <button v-if="p.autorId === user?.uid" class="del" @click="removePost(p)"><X :size="15" /></button>
+          <button v-if="puedeBorrarPost(p)" class="del" @click="removePost(p)"><X :size="15" /></button>
         </header>
         <p class="post-text">{{ p.texto }}</p>
         <StoredImage v-if="p.fotoId || p.foto" class="post-img" :orchard-id="orchardId" :foto-id="p.fotoId" :url="p.foto" />
@@ -139,6 +141,7 @@ import { X, ChevronRight, Leaf, Plus, MessageSquare } from 'lucide-vue-next'
 import { useAuth } from '../composables/useAuth'
 import ImageUpload from '../components/ImageUpload.vue'
 import StoredImage from '../components/StoredImage.vue'
+import { nombreRol, permisosEn, mensajeError } from '../utils/permissions'
 import {
   getHuerto,
   getCultivos,
@@ -179,6 +182,10 @@ const showDone = ref(false)
 const nuevoPost = ref('')
 const postFoto = ref('')
 const publicando = ref(false)
+
+const permisos = computed(() => permisosEn(huerto.value, user.value?.uid))
+const puedeBorrarPost = (p) =>
+  permisos.value.admin || (permisos.value.publishPosts && p.autorId === user.value?.uid)
 
 const inicial = computed(() =>
   (user.value?.displayName || user.value?.email || '?').charAt(0).toUpperCase(),
@@ -223,9 +230,10 @@ async function load() {
   if (pRes.status === 'fulfilled') posts.value = pRes.value
 
   // Solo es un error real si no se pudo cargar el huerto en sí.
-  if (hRes.status === 'rejected') {
-    error.value = 'No se pudo cargar el huerto.'
-    console.error(hRes.reason)
+  if (hRes.status === 'rejected' || !hRes.value) {
+    // Las reglas rechazan la lectura si ya no soy miembro (o si no existe).
+    error.value = 'No tienes acceso a este huerto o ya no existe.'
+    if (hRes.reason) console.error(hRes.reason)
   } else if (pRes.status === 'rejected') {
     console.warn('Cuaderno de campo no disponible (revisa las reglas de posts):', pRes.reason)
   }
@@ -252,7 +260,7 @@ async function addCrop() {
     cropFoto.value = ''
   } catch (e) {
     await limpiarFoto(orchardId, fotoId, '')
-    error.value = 'No se pudo crear el cultivo.'
+    error.value = mensajeError(e, 'No se pudo crear el cultivo.')
     console.error(e)
   } finally {
     guardandoCultivo.value = false
@@ -265,7 +273,7 @@ async function removeCrop(c) {
     await deleteCultivo(orchardId, c.id, c.fotoId)
     cultivos.value = cultivos.value.filter((x) => x.id !== c.id)
   } catch (e) {
-    error.value = 'No se pudo eliminar el cultivo.'
+    error.value = mensajeError(e, 'No se pudo eliminar el cultivo.')
     console.error(e)
   }
 }
@@ -282,7 +290,7 @@ async function addTask() {
     tareas.value.unshift({ id, completada: false, ...datos })
     taskTitulo.value = ''
   } catch (e) {
-    error.value = 'No se pudo crear la tarea.'
+    error.value = mensajeError(e, 'No se pudo crear la tarea.')
     console.error(e)
   }
 }
@@ -294,14 +302,14 @@ async function toggleTask(t) {
     await updateTarea(orchardId, t.id, { completada: nuevo })
   } catch (e) {
     t.completada = !nuevo // revertir solo si falla el guardado de la tarea
-    error.value = 'No se pudo actualizar la tarea.'
+    error.value = mensajeError(e, 'No se pudo actualizar la tarea.')
     console.error(e)
     return
   }
   // Al completar una tarea se publica automáticamente en el cuaderno. Si esto
   // falla (p. ej. reglas de posts no publicadas) NO revertimos la tarea: ya
   // quedó completada correctamente.
-  if (nuevo) {
+  if (nuevo && permisos.value.publishPosts) {
     try {
       const { id } = await createPost(orchardId, {
         texto: `He completado la tarea: ${t.titulo}`,
@@ -325,6 +333,7 @@ async function removeTask(t) {
     await deleteTarea(orchardId, t.id)
     tareas.value = tareas.value.filter((x) => x.id !== t.id)
   } catch (e) {
+    error.value = mensajeError(e, 'No se pudo eliminar la tarea.')
     console.error(e)
   }
 }
@@ -344,7 +353,7 @@ async function publicar() {
     postFoto.value = ''
   } catch (e) {
     await limpiarFoto(orchardId, fotoId, '')
-    error.value = 'No se pudo publicar.'
+    error.value = mensajeError(e, 'No se pudo publicar.')
     console.error(e)
   } finally {
     publicando.value = false
@@ -357,6 +366,7 @@ async function removePost(p) {
     await deletePost(orchardId, p.id, p.fotoId)
     posts.value = posts.value.filter((x) => x.id !== p.id)
   } catch (e) {
+    error.value = mensajeError(e, 'No se pudo eliminar la publicación.')
     console.error(e)
   }
 }

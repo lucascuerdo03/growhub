@@ -30,9 +30,17 @@
 
       <p v-if="error" class="error">{{ error }}</p>
 
+      <div v-if="invitaciones.length" class="notice">
+        <span>
+          Tienes {{ invitaciones.length }}
+          {{ invitaciones.length === 1 ? 'invitación pendiente' : 'invitaciones pendientes' }}.
+        </span>
+        <router-link to="/invitations" class="btn-outline">Ver invitaciones</router-link>
+      </div>
+
       <h2 class="section-title">Mis huertos</h2>
 
-      <div v-if="!huertos.length" class="empty">
+      <div v-if="!propios.length" class="empty">
         <Sprout :size="40" class="empty-ic" />
         <h3>No tienes huertos todavía</h3>
         <p>Crea tu primer huerto para empezar a gestionar cultivos, sensores y tareas.</p>
@@ -40,7 +48,7 @@
       </div>
 
       <div v-else class="grid">
-        <div v-for="h in huertos" :key="h.id" class="card">
+        <div v-for="h in propios" :key="h.id" class="card">
           <div class="card-media">
             <StoredImage class="card-img" :orchard-id="h.id" :foto-id="h.fotoId" :url="h.imagen" :alt="h.nombre">
               <Sprout :size="30" class="media-ic" />
@@ -48,6 +56,7 @@
             <button class="del" title="Eliminar" @click="remove(h.id)"><X :size="15" /></button>
           </div>
           <div class="card-body">
+            <span class="role">{{ nombreRol(rolEn(h, user.uid)) }}</span>
             <h3>{{ h.nombre }}</h3>
             <p class="loc">{{ h.descripcion || 'Sin ubicación' }}</p>
             <div class="meta">
@@ -63,6 +72,29 @@
           <span>Nuevo huerto</span>
         </button>
       </div>
+
+      <template v-if="compartidos.length">
+        <h2 class="section-title shared">Compartidos conmigo</h2>
+        <div class="grid">
+          <div v-for="h in compartidos" :key="h.id" class="card">
+            <div class="card-media">
+              <StoredImage class="card-img" :orchard-id="h.id" :foto-id="h.fotoId" :url="h.imagen" :alt="h.nombre">
+                <Sprout :size="30" class="media-ic" />
+              </StoredImage>
+            </div>
+            <div class="card-body">
+              <span class="role">{{ nombreRol(rolEn(h, user.uid)) }}</span>
+              <h3>{{ h.nombre }}</h3>
+              <p class="loc">{{ h.descripcion || 'Sin ubicación' }}</p>
+              <div class="meta">
+                <span>{{ h.nCultivos }} cultivos</span>
+                <span>{{ h.nTareasPend }} tareas</span>
+              </div>
+              <router-link :to="`/orchard/${h.id}`" class="btn-outline">Abrir huerto</router-link>
+            </div>
+          </div>
+        </div>
+      </template>
     </template>
 
     <BaseModal v-if="showModal" title="Nuevo huerto" @close="closeModal">
@@ -98,6 +130,8 @@
 import { ref, computed, onMounted, defineAsyncComponent } from 'vue'
 import { Plus, Sprout, Leaf, ListChecks, X } from 'lucide-vue-next'
 import { useAuth } from '../composables/useAuth'
+import { useInvitaciones } from '../composables/useInvitaciones'
+import { nombreRol, rolEn } from '../utils/permissions'
 import BaseModal from '../components/BaseModal.vue'
 import ImageUpload from '../components/ImageUpload.vue'
 import StoredImage from '../components/StoredImage.vue'
@@ -111,7 +145,10 @@ import {
 } from '../services/firestoreService'
 
 const { user } = useAuth()
+const { invitaciones } = useInvitaciones()
 const huertos = ref([])
+const propios = computed(() => huertos.value.filter((h) => h.ownerId === user.value.uid))
+const compartidos = computed(() => huertos.value.filter((h) => h.ownerId !== user.value.uid))
 const totals = ref({ huertos: 0, cultivos: 0, tareasPend: 0, sensores: 0 })
 const loading = ref(true)
 const error = ref('')
@@ -301,6 +338,31 @@ onMounted(load)
 }
 .card-body {
   padding: 18px;
+}
+.role {
+  display: inline-block;
+  background: var(--color-primary-soft);
+  color: var(--color-primary-dark);
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 999px;
+  margin-bottom: 8px;
+}
+.notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-primary-border);
+  border-radius: var(--radius-md);
+  padding: 12px 18px;
+  margin-bottom: 26px;
+}
+.section-title.shared {
+  margin-top: 34px;
 }
 .card-body h3 {
   margin: 0 0 4px;

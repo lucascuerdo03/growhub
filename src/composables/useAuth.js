@@ -36,6 +36,9 @@ export const refreshUser = () => {
 export const reloadUser = async () => {
   if (auth.currentUser) {
     await auth.currentUser.reload()
+    // reload() no renueva el token, y las reglas de invitaciones leen de él
+    // email_verified: sin esto seguiría a false hasta una hora después.
+    if (auth.currentUser.emailVerified) await auth.currentUser.getIdToken(true)
     user.value = mapUser(auth.currentUser)
   }
   return user.value

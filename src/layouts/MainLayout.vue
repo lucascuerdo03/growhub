@@ -10,6 +10,12 @@
           <router-link to="/sensors">Sensores</router-link>
           <router-link to="/biblioteca">Biblioteca</router-link>
           <router-link to="/settings">Ajustes</router-link>
+          <router-link to="/invitations" class="nav-invitations">
+            Invitaciones
+            <span v-if="invitaciones.length" class="badge" :aria-label="`${invitaciones.length} pendientes`">
+              {{ invitaciones.length }}
+            </span>
+          </router-link>
         </nav>
 
         <div class="nav-right">
@@ -36,15 +42,29 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { LogOut, Menu } from 'lucide-vue-next'
 import { logoutUser } from '../services/authService'
 import { useAuth } from '../composables/useAuth'
+import {
+  useInvitaciones,
+  escucharInvitaciones,
+  dejarDeEscucharInvitaciones,
+} from '../composables/useInvitaciones'
+import { asegurarUsuario } from '../services/firestoreService'
 
 const router = useRouter()
 const { user } = useAuth()
+const { invitaciones } = useInvitaciones()
 const open = ref(false)
+
+onMounted(() => {
+  escucharInvitaciones(user.value.email)
+  // Cuentas creadas antes de existir users/{uid}.
+  asegurarUsuario(user.value).catch((e) => console.warn('No se pudo guardar el perfil:', e))
+})
+onBeforeUnmount(dejarDeEscucharInvitaciones)
 
 const initial = computed(() =>
   (user.value?.displayName || user.value?.email || '?').charAt(0).toUpperCase(),
@@ -108,6 +128,23 @@ async function logout() {
 .nav-links a.router-link-active {
   color: var(--color-primary);
   background: var(--color-primary-soft);
+}
+.nav-invitations {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
 }
 .nav-right {
   display: flex;

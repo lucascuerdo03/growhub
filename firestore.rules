@@ -1,29 +1,212 @@
 rules_version = '2';
 
-// Reglas de GrowHub: cada usuario solo accede a sus propios huertos
-// (y a todas sus subcolecciones). Simple y robusto.
+// Reglas de GrowHub: huertos compartidos con roles y permisos.
 // Pégalas en: Firebase Console > Firestore Database > Reglas > Publicar.
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    match /orchards/{orchardId} {
-      allow read, update, delete: if request.auth != null
-        && resource.data.ownerId == request.auth.uid;
-      allow create: if request.auth != null
-        && request.resource.data.ownerId == request.auth.uid;
+    function autenticado() {
+      return request.auth != null;
+    }
+    function miEmail() {
+      return request.auth.token.email.lower();
+    }
+    function emailVerificado() {
+      return request.auth.token.email_verified == true;
+    }
+    function huertoDe(id) {
+      return get(/databases/$(database)/documents/orchards/$(id)).data;
+    }
+    function esMiembroDe(h) {
+      return h.ownerId == request.auth.uid || request.auth.uid in h.memberIds;
+    }
+    // La autoridad del propietario sale de ownerId, nunca del texto del rol: no
+    // se puede conseguir escribiendo role: 'propietario' en el mapa de miembros.
+    function esAdminDe(h) {
+      return h.ownerId == request.auth.uid
+        || h.members[request.auth.uid].role == 'administrador';
+    }
+    function tienePermiso(h, permiso) {
+      return h.ownerId == request.auth.uid
+        || h.members[request.auth.uid].permissions[permiso] == true;
+    }
+    // Debe coincidir con ROLES en src/utils/permissions.js.
+    function permisosRol(role) {
+      return role == 'administrador'
+        ? { 'manageCrops': true, 'manageTasks': true, 'completeTasks': true,
+            'manageSensors': true, 'publishPosts': true, 'inviteMembers': true }
+        : role == 'colaborador'
+          ? { 'manageCrops': true, 'manageTasks': true, 'completeTasks': true,
+              'manageSensors': true, 'publishPosts': true, 'inviteMembers': false }
+          : { 'manageCrops': false, 'manageTasks': false, 'completeTasks': false,
+              'manageSensors': false, 'publishPosts': false, 'inviteMembers': false };
+    }
+    function miembrosCoherentes(d) {
+      return d.members.keys().toSet() == d.memberIds.toSet();
+    }
 
-      function esDueno() {
-        return request.auth != null
-          && get(/databases/$(database)/documents/orchards/$(orchardId)).data.ownerId == request.auth.uid;
+    // Perfil público mínimo. Se puede leer conociendo el uid, pero no listar:
+    // así nadie puede sacar la lista de emails de todos los usuarios.
+    match /users/{uid} {
+      allow get: if autenticado();
+      allow create, update: if autenticado() && request.auth.uid == uid
+        && request.resource.data.email == miEmail();
+    }
+
+    // El id es "{orchardId}_{email}": una invitación por persona y huerto, y las
+    // reglas del huerto pueden localizarla al aceptar.
+    match /invitations/{invitationId} {
+      function invitacionValida() {
+        let d = request.resource.data;
+        let h = huertoDe(d.orchardId);
+        return autenticado()
+          && invitationId == d.orchardId + '_' + d.email
+          && d.email == d.email.lower()
+          && d.status == 'pending'
+          && d.invitedBy == request.auth.uid
+          && tienePermiso(h, 'inviteMembers')
+          && (d.role in ['colaborador', 'lector']
+              || (d.role == 'administrador' && esAdminDe(h)));
+      }
+      function respuestaValida() {
+        return autenticado() && emailVerificado()
+          && resource.data.email == miEmail()
+          && resource.data.status == 'pending'
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['status', 'respondedAt'])
+          && request.resource.data.status in ['accepted', 'rejected'];
       }
 
-      match /crops/{cropId}    { allow read, write: if esDueno(); }
-      match /tasks/{taskId}    { allow read, write: if esDueno(); }
-      match /posts/{postId}    { allow read, write: if esDueno(); }
-      match /photos/{photoId}  { allow read, write: if esDueno(); }
+      allow read: if autenticado()
+        && ((emailVerificado() && resource.data.email == miEmail())
+            || esMiembroDe(huertoDe(resource.data.orchardId)));
+      allow create: if invitacionValida();
+      allow update: if invitacionValida() || respuestaValida();
+      allow delete: if autenticado()
+        && (resource.data.invitedBy == request.auth.uid
+            || esAdminDe(huertoDe(resource.data.orchardId)));
+    }
+
+    match /orchards/{orchardId} {
+      function propietarioActualiza() {
+        let n = request.resource.data;
+        return resource.data.ownerId == request.auth.uid
+          && n.ownerId == request.auth.uid
+          && (!('memberIds' in n)
+              || (miembrosCoherentes(n)
+                  && request.auth.uid in n.memberIds
+                  && n.members[request.auth.uid].role == 'propietario'));
+      }
+      // Un administrador gestiona todo, salvo la entrada del propietario.
+      function administradorActualiza() {
+        let v = resource.data;
+        let n = request.resource.data;
+        return v.ownerId != request.auth.uid
+          && v.members[request.auth.uid].role == 'administrador'
+          && n.ownerId == v.ownerId
+          && miembrosCoherentes(n)
+          && n.members[v.ownerId] == v.members[v.ownerId];
+      }
+      // Cualquier miembro puede irse, pero solo puede quitarse a sí mismo.
+      function miembroAbandona() {
+        let v = resource.data;
+        let n = request.resource.data;
+        return v.ownerId != request.auth.uid
+          && request.auth.uid in v.memberIds
+          && n.diff(v).affectedKeys().hasOnly(['memberIds', 'members'])
+          && n.memberIds == v.memberIds.removeAll([request.auth.uid])
+          && n.members.diff(v.members).affectedKeys().hasOnly([request.auth.uid])
+          && !(request.auth.uid in n.members);
+      }
+      // Aceptar: solo con una invitación pendiente para mi email verificado, con
+      // el rol invitado y sus permisos por defecto. Una invitación ya usada no
+      // sirve para volver a entrar tras ser expulsado.
+      function invitadoAcepta() {
+        let v = resource.data;
+        let n = request.resource.data;
+        let inv = get(/databases/$(database)/documents/invitations/$(orchardId + '_' + miEmail())).data;
+        return emailVerificado()
+          && !(request.auth.uid in v.memberIds)
+          && inv.status == 'pending'
+          && inv.orchardId == orchardId
+          && n.diff(v).affectedKeys().hasOnly(['memberIds', 'members'])
+          && n.memberIds == v.memberIds.concat([request.auth.uid])
+          && n.members.diff(v.members).affectedKeys().hasOnly([request.auth.uid])
+          && n.members[request.auth.uid].role == inv.role
+          && n.members[request.auth.uid].permissions == permisosRol(inv.role);
+      }
+
+      // Consultas de la app: where('ownerId', '==', uid) y
+      // where('memberIds', 'array-contains', uid). Cada una cumple una rama.
+      allow read: if autenticado()
+        && (resource.data.ownerId == request.auth.uid
+            || request.auth.uid in resource.data.memberIds);
+      allow create: if autenticado()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.memberIds == [request.auth.uid]
+        && request.resource.data.members.size() == 1
+        && request.resource.data.members[request.auth.uid].role == 'propietario';
+      allow update: if autenticado()
+        && (propietarioActualiza() || administradorActualiza()
+            || miembroAbandona() || invitadoAcepta());
+      allow delete: if autenticado() && resource.data.ownerId == request.auth.uid;
+
+      function miembro() {
+        return autenticado() && esMiembroDe(huertoDe(orchardId));
+      }
+      function puede(permiso) {
+        return autenticado() && tienePermiso(huertoDe(orchardId), permiso);
+      }
+      function admin() {
+        return autenticado() && esAdminDe(huertoDe(orchardId));
+      }
+
+      match /crops/{cropId} {
+        allow read: if miembro();
+        allow write: if puede('manageCrops');
+      }
+
+      match /tasks/{taskId} {
+        allow read: if miembro();
+        allow create, delete: if puede('manageTasks');
+        // "Completar" y "gestionar" son permisos independientes.
+        allow update: if
+          (puede('completeTasks')
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['completada']))
+          || (puede('manageTasks')
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['completada']));
+      }
+
       match /sensors/{sensorId} {
-        allow read, write: if esDueno();
-        match /readings/{readingId} { allow read, write: if esDueno(); }
+        allow read: if miembro();
+        allow write: if puede('manageSensors');
+        match /readings/{readingId} {
+          allow read: if miembro();
+          allow write: if puede('manageSensors');
+        }
+      }
+
+      match /posts/{postId} {
+        allow read: if miembro();
+        allow create: if puede('publishPosts')
+          && request.resource.data.autorId == request.auth.uid;
+        allow delete: if admin()
+          || (puede('publishPosts') && resource.data.autorId == request.auth.uid);
+      }
+
+      // Una imagen por documento (ver src/utils/imagen.js). Máx. 1 000 000 de
+      // caracteres en base64 para no acercarse al límite de 1 MiB de Firestore.
+      match /photos/{photoId} {
+        function puedeSubirFotos() {
+          return admin() || puede('manageCrops') || puede('publishPosts');
+        }
+        allow read: if miembro();
+        allow create: if puedeSubirFotos()
+          && request.resource.data.uploadedBy == request.auth.uid
+          && request.resource.data.data is string
+          && request.resource.data.data.size() <= 1000000;
+        allow delete: if admin()
+          || (puedeSubirFotos() && resource.data.uploadedBy == request.auth.uid);
       }
     }
   }

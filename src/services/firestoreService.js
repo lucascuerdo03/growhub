@@ -3,6 +3,7 @@ import {
   addDoc,
   getDocs,
   getDoc,
+  setDoc,
   doc,
   deleteDoc,
   updateDoc,
@@ -13,19 +14,72 @@ import {
   serverTimestamp,
   arrayUnion,
   arrayRemove,
+  deleteField,
+  onSnapshot,
   writeBatch,
 } from 'firebase/firestore'
 import { db, auth } from '../firebase'
+import { miembroConRol } from '../utils/permissions'
+
+/* ----------------------------- Usuarios ---------------------------- */
+// users/{uid}: nombre y email en minúsculas, para mostrar a los miembros.
+
+export const guardarUsuario = (uid, { nombre, email }) =>
+  setDoc(doc(db, 'users', uid), { nombre, email: email.toLowerCase() }, { merge: true })
+
+export const getUsuario = async (uid) => {
+  const snap = await getDoc(doc(db, 'users', uid))
+  return snap.exists() ? snap.data() : null
+}
+
+// Crea el perfil si no existe y mantiene el nombre al día.
+export const asegurarUsuario = async ({ uid, email, displayName }) => {
+  const nombre = displayName || email.split('@')[0]
+  const actual = await getUsuario(uid)
+  if (!actual || (displayName && actual.nombre !== displayName)) {
+    await guardarUsuario(uid, { nombre, email })
+  }
+}
 
 /* ----------------------------- Huertos ----------------------------- */
 
 const porFecha = (a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
 
-// Huertos del usuario (solo los que posee). Una única consulta simple que
-// funciona con reglas de solo-dueño.
+// Los huertos anteriores a los roles no tienen miembros: su dueño pasa a figurar
+// como propietario la primera vez que los carga.
+const migrarHuerto = async (h, uid) => {
+  if (h.ownerId !== uid || h.memberIds) return h
+  const campos = { memberIds: [uid], members: { [uid]: miembroConRol('propietario') } }
+  try {
+    await updateDoc(doc(db, 'orchards', h.id), campos)
+    return { ...h, ...campos }
+  } catch (e) {
+    console.warn('No se pudo migrar el huerto:', e)
+    return h
+  }
+}
+
+// Huertos propios y compartidos conmigo. Las dos consultas coinciden con las
+// reglas (una rama de `allow read` cada una). Se piden por separado para que los
+// huertos propios se sigan viendo aunque falle la de los compartidos.
 export const getHuertos = async (uid) => {
-  const snap = await getDocs(query(collection(db, 'orchards'), where('ownerId', '==', uid)))
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort(porFecha)
+  const col = collection(db, 'orchards')
+  const [propios, compartidos] = await Promise.allSettled([
+    getDocs(query(col, where('ownerId', '==', uid))),
+    getDocs(query(col, where('memberIds', 'array-contains', uid))),
+  ])
+  if (propios.status === 'rejected') throw propios.reason
+  if (compartidos.status === 'rejected') {
+    console.warn('No se pudieron cargar los huertos compartidos:', compartidos.reason)
+  }
+  const porId = new Map()
+  for (const res of [propios, compartidos]) {
+    if (res.status === 'fulfilled') {
+      res.value.docs.forEach((d) => porId.set(d.id, { id: d.id, ...d.data() }))
+    }
+  }
+  const huertos = await Promise.all([...porId.values()].map((h) => migrarHuerto(h, uid)))
+  return huertos.sort(porFecha)
 }
 
 export const createHuerto = async (
@@ -38,6 +92,8 @@ export const createHuerto = async (
     lat,
     lng,
     ownerId: uid,
+    memberIds: [uid],
+    members: { [uid]: miembroConRol('propietario') },
     createdAt: serverTimestamp(),
   })
   return ref.id
@@ -45,7 +101,8 @@ export const createHuerto = async (
 
 export const getHuerto = async (id) => {
   const snap = await getDoc(doc(db, 'orchards', id))
-  return snap.exists() ? { id: snap.id, ...snap.data() } : null
+  if (!snap.exists()) return null
+  return migrarHuerto({ id: snap.id, ...snap.data() }, auth.currentUser?.uid)
 }
 
 // Actualiza campos del huerto (nombre, descripción, lat, lng…).
@@ -71,21 +128,89 @@ export const deleteHuerto = async (id) => {
     for (const nombre of ['crops', 'tasks', 'posts', 'photos', 'sensors']) {
       await borrarDocs(sub(nombre))
     }
+    await borrarDocs(query(collection(db, 'invitations'), where('orchardId', '==', id)))
   } catch (e) {
     console.warn('No se pudieron borrar todos los datos del huerto:', e)
   }
   await deleteDoc(doc(db, 'orchards', id))
 }
 
-// Equipo: colaboradores por email (en minúsculas).
-export const addColaborador = (id, email) =>
-  updateDoc(doc(db, 'orchards', id), {
-    colaboradoresEmails: arrayUnion(email.trim().toLowerCase()),
+/* ----------------------------- Miembros ---------------------------- */
+// En el huerto: memberIds (para consultar) y members (uid -> { role, permissions }).
+
+export const setMiembro = (orchardId, uid, datos) =>
+  updateDoc(doc(db, 'orchards', orchardId), { [`members.${uid}`]: datos })
+
+// Sirve para expulsar a otro miembro y para abandonar el huerto uno mismo.
+export const quitarMiembro = (orchardId, uid) =>
+  updateDoc(doc(db, 'orchards', orchardId), {
+    memberIds: arrayRemove(uid),
+    [`members.${uid}`]: deleteField(),
   })
 
-export const removeColaborador = (id, email) =>
-  updateDoc(doc(db, 'orchards', id), {
-    colaboradoresEmails: arrayRemove(email),
+/* --------------------------- Invitaciones -------------------------- */
+// invitations/{orchardId}_{email}: una por persona y huerto. Se buscan por email,
+// así que el invitado las ve aunque cree la cuenta después de ser invitado.
+
+export const invitarMiembro = (huerto, email, role, invitador) => {
+  const correo = email.trim().toLowerCase()
+  return setDoc(doc(db, 'invitations', `${huerto.id}_${correo}`), {
+    orchardId: huerto.id,
+    orchardNombre: huerto.nombre,
+    email: correo,
+    role,
+    invitedBy: invitador.uid,
+    invitedByNombre: invitador.displayName || invitador.email,
+    status: 'pending',
+    createdAt: serverTimestamp(),
+  })
+}
+
+export const getInvitacionesHuerto = async (orchardId) => {
+  const snap = await getDocs(
+    query(
+      collection(db, 'invitations'),
+      where('orchardId', '==', orchardId),
+      where('status', '==', 'pending'),
+    ),
+  )
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+}
+
+export const cancelarInvitacion = (id) => deleteDoc(doc(db, 'invitations', id))
+
+// Avisa en tiempo real de mis invitaciones pendientes. Devuelve la función para
+// dejar de escuchar.
+export const escucharMisInvitaciones = (email, alCambiar, alFallar) =>
+  onSnapshot(
+    query(
+      collection(db, 'invitations'),
+      where('email', '==', email.toLowerCase()),
+      where('status', '==', 'pending'),
+    ),
+    (snap) => alCambiar(snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort(porFecha)),
+    alFallar,
+  )
+
+// En un lote: las reglas del huerto comprueban que la invitación siga pendiente,
+// y ven el estado anterior al lote.
+export const aceptarInvitacion = (inv, uid) => {
+  const batch = writeBatch(db)
+  batch.update(doc(db, 'orchards', inv.orchardId), {
+    memberIds: arrayUnion(uid),
+    [`members.${uid}`]: miembroConRol(inv.role),
+  })
+  batch.update(doc(db, 'invitations', inv.id), {
+    status: 'accepted',
+    respondedAt: serverTimestamp(),
+  })
+  return batch.commit()
+}
+
+export const rechazarInvitacion = (inv) =>
+  updateDoc(doc(db, 'invitations', inv.id), {
+    status: 'rejected',
+    respondedAt: serverTimestamp(),
   })
 
 /* ----------------------------- Cultivos ---------------------------- */

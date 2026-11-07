@@ -5,11 +5,11 @@
       <p class="sub">Todas las tareas de tus huertos en un solo sitio.</p>
     </header>
 
-    <form v-if="huertos.length" class="task-form" @submit.prevent="add">
+    <form v-if="huertosEditables.length" class="task-form" @submit.prevent="add">
       <input v-model="titulo" class="full" placeholder="Nueva tarea (ej: Regar tomates)" />
       <div class="row">
         <select v-model="orchardId">
-          <option v-for="h in huertos" :key="h.id" :value="h.id">{{ h.nombre }}</option>
+          <option v-for="h in huertosEditables" :key="h.id" :value="h.id">{{ h.nombre }}</option>
         </select>
         <select v-model="frecuenciaRiego">
           <option v-for="f in FRECUENCIAS" :key="f" :value="f">{{ f }}</option>
@@ -30,7 +30,7 @@
 
     <ul v-else class="list">
       <li v-for="t in tareas" :key="t.orchardId + t.id" :class="{ done: t.completada }">
-        <input type="checkbox" :checked="t.completada" @change="toggle(t)" />
+        <input type="checkbox" :checked="t.completada" :disabled="!permisosDe(t).completeTasks" @change="toggle(t)" />
         <div class="info">
           <strong>{{ t.titulo }}</strong>
           <p v-if="t.descripcion" class="desc">{{ t.descripcion }}</p>
@@ -42,15 +42,16 @@
             <span v-if="t.frecuenciaRiego" class="tag water">Riego: {{ t.frecuenciaRiego }}</span>
           </div>
         </div>
-        <button class="del" @click="remove(t)">✕</button>
+        <button v-if="permisosDe(t).manageTasks" class="del" aria-label="Eliminar" @click="remove(t)">✕</button>
       </li>
     </ul>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useAuth } from '../composables/useAuth'
+import { permisosEn, mensajeError } from '../utils/permissions'
 import {
   getHuertos,
   getAllTareas,
@@ -72,12 +73,18 @@ const loading = ref(true)
 const saving = ref(false)
 const error = ref('')
 
+const huertosEditables = computed(() =>
+  huertos.value.filter((h) => permisosEn(h, user.value.uid).manageTasks),
+)
+const permisosDe = (t) =>
+  permisosEn(huertos.value.find((h) => h.id === t.orchardId), user.value.uid)
+
 async function load() {
   loading.value = true
   error.value = ''
   try {
     huertos.value = await getHuertos(user.value.uid)
-    if (huertos.value.length && !orchardId.value) orchardId.value = huertos.value[0].id
+    if (huertosEditables.value.length && !orchardId.value) orchardId.value = huertosEditables.value[0].id
     tareas.value = await getAllTareas(user.value.uid)
   } catch (e) {
     error.value = 'No se pudieron cargar las tareas.'
@@ -109,7 +116,7 @@ async function add() {
     })
     titulo.value = ''
   } catch (e) {
-    error.value = 'No se pudo crear la tarea.'
+    error.value = mensajeError(e, 'No se pudo crear la tarea.')
     console.error(e)
   } finally {
     saving.value = false
@@ -123,12 +130,12 @@ async function toggle(t) {
     await updateTarea(t.orchardId, t.id, { completada: nuevo })
   } catch (e) {
     t.completada = !nuevo
-    error.value = 'No se pudo actualizar la tarea.'
+    error.value = mensajeError(e, 'No se pudo actualizar la tarea.')
     console.error(e)
     return
   }
   // Al completar, se autopublica en el cuaderno del huerto (no es crítico).
-  if (nuevo) {
+  if (nuevo && permisosDe(t).publishPosts) {
     try {
       await createPost(t.orchardId, {
         texto: `He completado la tarea: ${t.titulo}`,
@@ -148,7 +155,7 @@ async function remove(t) {
     await deleteTarea(t.orchardId, t.id)
     tareas.value = tareas.value.filter((x) => !(x.orchardId === t.orchardId && x.id === t.id))
   } catch (e) {
-    error.value = 'No se pudo eliminar la tarea.'
+    error.value = mensajeError(e, 'No se pudo eliminar la tarea.')
     console.error(e)
   }
 }

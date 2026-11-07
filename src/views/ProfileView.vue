@@ -34,6 +34,7 @@
 import { ref, computed, watch } from 'vue'
 import { useAuth, refreshUser } from '../composables/useAuth'
 import { updateUserProfile } from '../services/authService'
+import { asegurarUsuario } from '../services/firestoreService'
 
 const { user } = useAuth()
 
@@ -60,6 +61,8 @@ async function save() {
       photoURL: photoURL.value.trim(),
     })
     refreshUser()
+    // El nombre también se muestra a los demás miembros de tus huertos.
+    await asegurarUsuario(user.value).catch((e) => console.warn(e))
     saved.value = true
   } catch (e) {
     error.value = 'No se pudieron guardar los cambios.'

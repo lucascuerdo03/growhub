@@ -3,7 +3,7 @@
     <router-link :to="`/orchard/${orchardId}`" class="back">← Volver al huerto</router-link>
     <h1>Tareas</h1>
 
-    <form class="task-form" @submit.prevent="add">
+    <form v-if="permisos.manageTasks" class="task-form" @submit.prevent="add">
       <input v-model="titulo" class="full" placeholder="Título de la tarea (ej: Regar tomates)" />
       <input v-model="descripcion" class="full" placeholder="Descripción (opcional)" />
 
@@ -36,6 +36,7 @@
         <input
           type="checkbox"
           :checked="t.completada"
+          :disabled="!permisos.completeTasks"
           @change="toggle(t)"
           title="Marcar como completada"
         />
@@ -47,17 +48,19 @@
             <span v-if="t.frecuenciaRiego" class="tag water">Riego: {{ t.frecuenciaRiego }}</span>
           </div>
         </div>
-        <button class="del" @click="remove(t)">✕</button>
+        <button v-if="permisos.manageTasks" class="del" aria-label="Eliminar" @click="remove(t)">✕</button>
       </li>
     </ul>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
+import { permisosEn, mensajeError } from '../utils/permissions'
 import {
+  getHuerto,
   getCultivos,
   getTareas,
   createTarea,
@@ -79,6 +82,8 @@ const FRECUENCIAS = [
 const route = useRoute()
 const orchardId = route.params.id
 
+const huerto = ref(null)
+const permisos = computed(() => permisosEn(huerto.value, user.value?.uid))
 const tareas = ref([])
 const cultivos = ref([])
 const titulo = ref('')
@@ -93,7 +98,8 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    ;[tareas.value, cultivos.value] = await Promise.all([
+    ;[huerto.value, tareas.value, cultivos.value] = await Promise.all([
+      getHuerto(orchardId),
       getTareas(orchardId),
       getCultivos(orchardId),
     ])
@@ -125,7 +131,7 @@ async function add() {
     descripcion.value = ''
     cropId.value = null
   } catch (e) {
-    error.value = 'No se pudo crear la tarea.'
+    error.value = mensajeError(e, 'No se pudo crear la tarea.')
     console.error(e)
   } finally {
     saving.value = false
@@ -139,12 +145,12 @@ async function toggle(t) {
     await updateTarea(orchardId, t.id, { completada: nuevo })
   } catch (e) {
     t.completada = !nuevo // revertir solo si falla el guardado
-    error.value = 'No se pudo actualizar la tarea.'
+    error.value = mensajeError(e, 'No se pudo actualizar la tarea.')
     console.error(e)
     return
   }
   // Al completar, se autopublica en el cuaderno del huerto (no es crítico).
-  if (nuevo) {
+  if (nuevo && permisos.value.publishPosts) {
     try {
       await createPost(orchardId, {
         texto: `He completado la tarea: ${t.titulo}`,
@@ -164,7 +170,7 @@ async function remove(t) {
     await deleteTarea(orchardId, t.id)
     tareas.value = tareas.value.filter((x) => x.id !== t.id)
   } catch (e) {
-    error.value = 'No se pudo eliminar la tarea.'
+    error.value = mensajeError(e, 'No se pudo eliminar la tarea.')
     console.error(e)
   }
 }

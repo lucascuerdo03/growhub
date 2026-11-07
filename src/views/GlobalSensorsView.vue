@@ -52,7 +52,7 @@
         />
         <p v-else class="muted small">Aún no hay histórico.</p>
 
-        <button class="sim" :disabled="busy[s.orchardId + s.id]" @click="simular(s)">
+        <button v-if="puedeSimular(s)" class="sim" :disabled="busy[s.orchardId + s.id]" @click="simular(s)">
           {{ busy[s.orchardId + s.id] ? 'Registrando…' : '+ Simular lectura' }}
         </button>
       </div>
@@ -63,6 +63,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { useAuth } from '../composables/useAuth'
+import { permisosEn, mensajeError } from '../utils/permissions'
 import SensorChart from '../components/SensorChart.vue'
 import { SENSOR_TYPES, simularValor } from '../utils/sensorTypes'
 import {
@@ -78,6 +79,9 @@ const sensores = ref([])
 const busy = reactive({})
 const loading = ref(true)
 const error = ref('')
+
+const puedeSimular = (s) =>
+  permisosEn(huertos.value.find((h) => h.id === s.orchardId), user.value.uid).manageSensors
 
 function lastValue(s) {
   return s.lecturas && s.lecturas.length ? s.lecturas[s.lecturas.length - 1].valor : null
@@ -104,7 +108,7 @@ async function simular(s) {
     await addLectura(s.orchardId, s.id, simularValor(s.tipo))
     s.lecturas = await getLecturas(s.orchardId, s.id)
   } catch (e) {
-    error.value = 'No se pudo registrar la lectura.'
+    error.value = mensajeError(e, 'No se pudo registrar la lectura.')
     console.error(e)
   } finally {
     busy[key] = false

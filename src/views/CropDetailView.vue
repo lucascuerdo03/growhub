@@ -14,7 +14,7 @@
         <div class="ficha-body">
           <div class="ficha-head">
             <h1>{{ cultivo.nombre }}</h1>
-            <button class="edit-btn" @click="editing = !editing">{{ editing ? 'Cancelar' : 'Editar' }}</button>
+            <button v-if="permisos.manageCrops" class="edit-btn" @click="editing = !editing">{{ editing ? 'Cancelar' : 'Editar' }}</button>
           </div>
           <div class="pills">
             <span v-if="cultivo.especie" class="pill type">{{ cultivo.especie }}</span>
@@ -34,7 +34,7 @@
       </section>
 
       <!-- Edición -->
-      <section v-if="editing" class="card">
+      <section v-if="editing && permisos.manageCrops" class="card">
         <h2 class="section-title">Editar cultivo</h2>
         <form class="form" @submit.prevent="guardar">
           <label>Nombre</label>
@@ -64,7 +64,7 @@
       <section class="card">
         <h2 class="section-title">Sensores del cultivo</h2>
 
-        <div class="link-row">
+        <div v-if="permisos.manageSensors" class="link-row">
           <select v-model="sensorAVincular">
             <option :value="null">— Vincular un sensor —</option>
             <option v-for="s in sensoresDisponibles" :key="s.id" :value="s.id">
@@ -88,7 +88,7 @@
                 <span class="label">{{ SENSOR_TYPES[s.tipo]?.label }}</span>
                 <strong>{{ s.nombre }}</strong>
               </div>
-              <button class="unlink" title="Desvincular" @click="desvincular(s)">✕</button>
+              <button v-if="permisos.manageSensors" class="unlink" title="Desvincular" @click="desvincular(s)">✕</button>
             </header>
             <div class="value" :style="{ color: SENSOR_TYPES[s.tipo]?.color }">
               <template v-if="s.lecturas?.length">{{ s.lecturas.at(-1).valor }}<small>{{ s.unidad }}</small></template>
@@ -111,7 +111,10 @@ import SensorChart from '../components/SensorChart.vue'
 import ImageUpload from '../components/ImageUpload.vue'
 import StoredImage from '../components/StoredImage.vue'
 import { SENSOR_TYPES } from '../utils/sensorTypes'
+import { useAuth } from '../composables/useAuth'
+import { permisosEn, mensajeError } from '../utils/permissions'
 import {
+  getHuerto,
   getCultivo,
   updateCultivo,
   getSensores,
@@ -124,7 +127,10 @@ import {
 const route = useRoute()
 const orchardId = route.params.id
 const cropId = route.params.cropId
+const { user } = useAuth()
 
+const huerto = ref(null)
+const permisos = computed(() => permisosEn(huerto.value, user.value?.uid))
 const cultivo = ref(null)
 const sensores = ref([])
 const loading = ref(true)
@@ -153,7 +159,10 @@ async function cargarSensores() {
 async function load() {
   loading.value = true
   try {
-    cultivo.value = await getCultivo(orchardId, cropId)
+    ;[huerto.value, cultivo.value] = await Promise.all([
+      getHuerto(orchardId),
+      getCultivo(orchardId, cropId),
+    ])
     if (cultivo.value) {
       fNombre.value = cultivo.value.nombre || ''
       fEspecie.value = cultivo.value.especie || ''
@@ -190,7 +199,7 @@ async function guardar() {
     await limpiarFoto(orchardId, anterior, fotoId)
     savedMsg.value = 'Cambios guardados.'
   } catch (e) {
-    savedMsg.value = 'No se pudo guardar.'
+    savedMsg.value = mensajeError(e, 'No se pudo guardar.')
     console.error(e)
   } finally {
     saving.value = false

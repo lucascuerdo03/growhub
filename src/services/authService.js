@@ -7,6 +7,7 @@ import {
   updateProfile,
 } from 'firebase/auth'
 import { auth } from '../firebase'
+import { guardarUsuario } from './firestoreService'
 
 export const loginUser = (email, password) =>
   signInWithEmailAndPassword(auth, email, password)
@@ -15,6 +16,15 @@ export const registerUser = async (email, password, displayName) => {
   const cred = await createUserWithEmailAndPassword(auth, email, password)
   if (displayName) {
     await updateProfile(cred.user, { displayName })
+  }
+  // Si esto falla no se pierde el registro: se reintenta al entrar en la app.
+  try {
+    await guardarUsuario(cred.user.uid, {
+      nombre: displayName || email.split('@')[0],
+      email: cred.user.email,
+    })
+  } catch (e) {
+    console.warn('No se pudo crear el perfil de usuario:', e)
   }
   // Enviamos el correo de verificación tras crear la cuenta.
   await sendEmailVerification(cred.user)

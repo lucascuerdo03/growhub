@@ -3,7 +3,7 @@
     <router-link :to="`/orchard/${orchardId}`" class="back">← Volver al huerto</router-link>
     <h1>Sensores</h1>
 
-    <form class="add-bar" @submit.prevent="add">
+    <form v-if="permisos.manageSensors" class="add-bar" @submit.prevent="add">
       <input v-model="nombre" placeholder="Nombre del sensor" />
       <select v-model="tipo">
         <option v-for="(t, key) in SENSOR_TYPES" :key="key" :value="key">
@@ -27,7 +27,7 @@
             <span class="label">{{ SENSOR_TYPES[s.tipo]?.label }}</span>
             <h3>{{ s.nombre }}</h3>
           </div>
-          <button class="del" title="Eliminar" @click="remove(s.id)">✕</button>
+          <button v-if="permisos.manageSensors" class="del" title="Eliminar" @click="remove(s.id)">✕</button>
         </header>
 
         <div class="value" :style="{ color: SENSOR_TYPES[s.tipo]?.color }">
@@ -45,7 +45,7 @@
         />
         <p v-else class="muted small">Añade una lectura para ver el histórico.</p>
 
-        <button class="sim" :disabled="busy[s.id]" @click="simular(s)">
+        <button v-if="permisos.manageSensors" class="sim" :disabled="busy[s.id]" @click="simular(s)">
           {{ busy[s.id] ? 'Registrando…' : '+ Simular lectura' }}
         </button>
       </div>
@@ -54,11 +54,14 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { useAuth } from '../composables/useAuth'
+import { permisosEn, mensajeError } from '../utils/permissions'
 import SensorChart from '../components/SensorChart.vue'
 import { SENSOR_TYPES, simularValor } from '../utils/sensorTypes'
 import {
+  getHuerto,
   getSensores,
   createSensor,
   deleteSensor,
@@ -68,7 +71,10 @@ import {
 
 const route = useRoute()
 const orchardId = route.params.id
+const { user } = useAuth()
 
+const huerto = ref(null)
+const permisos = computed(() => permisosEn(huerto.value, user.value?.uid))
 const sensores = ref([])
 const readings = reactive({}) // sensorId -> [lecturas]
 const busy = reactive({}) // sensorId -> bool
@@ -91,7 +97,10 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    sensores.value = await getSensores(orchardId)
+    ;[huerto.value, sensores.value] = await Promise.all([
+      getHuerto(orchardId),
+      getSensores(orchardId),
+    ])
     await Promise.all(sensores.value.map((s) => loadReadings(s.id)))
   } catch (e) {
     error.value = 'No se pudieron cargar los sensores.'
@@ -114,7 +123,7 @@ async function add() {
     nombre.value = ''
     await load()
   } catch (e) {
-    error.value = 'No se pudo crear el sensor.'
+    error.value = mensajeError(e, 'No se pudo crear el sensor.')
     console.error(e)
   } finally {
     saving.value = false
@@ -128,7 +137,7 @@ async function remove(id) {
     sensores.value = sensores.value.filter((s) => s.id !== id)
     delete readings[id]
   } catch (e) {
-    error.value = 'No se pudo eliminar el sensor.'
+    error.value = mensajeError(e, 'No se pudo eliminar el sensor.')
     console.error(e)
   }
 }
@@ -139,7 +148,7 @@ async function simular(s) {
     await addLectura(orchardId, s.id, simularValor(s.tipo))
     await loadReadings(s.id)
   } catch (e) {
-    error.value = 'No se pudo registrar la lectura.'
+    error.value = mensajeError(e, 'No se pudo registrar la lectura.')
     console.error(e)
   } finally {
     busy[s.id] = false

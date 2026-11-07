@@ -5,6 +5,10 @@
 
     <p v-if="loading" class="muted">Cargando…</p>
 
+    <p v-else-if="huerto && !permisos.admin" class="error">
+      Solo el propietario o un administrador pueden cambiar los ajustes de este huerto.
+    </p>
+
     <template v-else-if="huerto">
       <form class="form" @submit.prevent="save">
         <label>Nombre</label>
@@ -37,20 +41,23 @@
         </button>
       </form>
 
-      <div class="danger">
+      <div v-if="permisos.propietario" class="danger">
         <h3>Eliminar huerto</h3>
         <p class="hint">Esta acción es permanente y no se puede deshacer.</p>
         <button class="del" @click="remove">Eliminar huerto</button>
       </div>
     </template>
 
-    <p v-else class="error">No se encontró el huerto.</p>
+    <p v-else-if="!error" class="error">No se encontró el huerto.</p>
+    <p v-else class="error">{{ error }}</p>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useAuth } from '../composables/useAuth'
+import { permisosEn, mensajeError } from '../utils/permissions'
 import LocationMap from '../components/LocationMap.vue'
 import ImageUpload from '../components/ImageUpload.vue'
 import {
@@ -64,8 +71,10 @@ import {
 const route = useRoute()
 const router = useRouter()
 const orchardId = route.params.id
+const { user } = useAuth()
 
 const huerto = ref(null)
+const permisos = computed(() => permisosEn(huerto.value, user.value?.uid))
 const nombre = ref('')
 const descripcion = ref('')
 const foto = ref('')
@@ -94,7 +103,7 @@ async function load() {
       lng.value = huerto.value.lng ?? null
     }
   } catch (e) {
-    error.value = 'No se pudo cargar el huerto.'
+    error.value = 'No tienes acceso a este huerto o ya no existe.'
     console.error(e)
   } finally {
     loading.value = false
@@ -124,7 +133,7 @@ async function save() {
     await limpiarFoto(orchardId, anterior, fotoId)
     saved.value = true
   } catch (e) {
-    error.value = 'No se pudieron guardar los cambios.'
+    error.value = mensajeError(e, 'No se pudieron guardar los cambios.')
     console.error(e)
   } finally {
     saving.value = false
@@ -137,7 +146,7 @@ async function remove() {
     await deleteHuerto(orchardId)
     router.push('/dashboard')
   } catch (e) {
-    error.value = 'No se pudo eliminar el huerto.'
+    error.value = mensajeError(e, 'No se pudo eliminar el huerto.')
     console.error(e)
   }
 }

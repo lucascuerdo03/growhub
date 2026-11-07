@@ -93,6 +93,7 @@ import { useAuth } from '../composables/useAuth'
 import BaseModal from '../components/BaseModal.vue'
 import { CROPS_LIBRARY } from '../data/cropsLibrary'
 import { getHuertos, createCultivo } from '../services/firestoreService'
+import { permisosEn } from '../utils/permissions'
 
 const { user } = useAuth()
 const search = ref('')
@@ -159,7 +160,9 @@ async function anadir() {
 
 onMounted(async () => {
   try {
-    huertos.value = await getHuertos(user.value.uid)
+    // Solo se puede añadir a huertos donde tengo permiso para gestionar cultivos.
+    const todos = await getHuertos(user.value.uid)
+    huertos.value = todos.filter((h) => permisosEn(h, user.value.uid).manageCrops)
   } catch (e) {
     console.error(e)
   }
