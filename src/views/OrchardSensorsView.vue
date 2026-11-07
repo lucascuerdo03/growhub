@@ -5,11 +5,16 @@
 
     <form v-if="permisos.manageSensors" class="add-bar" @submit.prevent="add">
       <input v-model="nombre" placeholder="Nombre del sensor" />
-      <select v-model="tipo">
+      <select v-model="tipo" aria-label="Tipo de sensor">
         <option v-for="(t, key) in SENSOR_TYPES" :key="key" :value="key">
           {{ t.label }} ({{ t.unidad }})
         </option>
       </select>
+      <select v-model="cropId" aria-label="Planta del sensor">
+        <option value="">Sin planta</option>
+        <option v-for="c in cultivos" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+      </select>
+      <input v-model="deviceId" placeholder="Id. del nodo (ej: growhub-nodo-01)" aria-label="Identificador del nodo físico" />
       <button type="submit" :disabled="saving || !nombre.trim()">Añadir sensor</button>
     </form>
 
@@ -17,8 +22,14 @@
     <p v-if="loading" class="muted">Cargando…</p>
     <p v-else-if="!sensores.length" class="muted">No hay sensores en este huerto.</p>
 
-    <div v-else class="sensor-grid">
-      <div v-for="s in sensores" :key="s.id" class="sensor-card">
+    <section v-for="g in grupos" v-else :key="g.id" class="group">
+      <h2 class="group-title">
+        <router-link v-if="g.id" :to="`/orchard/${orchardId}/crop/${g.id}`">{{ g.titulo }}</router-link>
+        <template v-else>{{ g.titulo }}</template>
+        <span class="group-count">{{ g.sensores.length }} {{ g.sensores.length === 1 ? 'sensor' : 'sensores' }}</span>
+      </h2>
+      <div class="sensor-grid">
+      <div v-for="s in g.sensores" :key="s.id" class="sensor-card">
         <header>
           <span class="icon-box" :style="{ background: SENSOR_TYPES[s.tipo]?.tint, color: SENSOR_TYPES[s.tipo]?.color }">
             <component :is="SENSOR_TYPES[s.tipo]?.icon" :size="22" />
@@ -26,9 +37,27 @@
           <div class="meta">
             <span class="label">{{ SENSOR_TYPES[s.tipo]?.label }}</span>
             <h3>{{ s.nombre }}</h3>
+            <span v-if="s.deviceId" class="device">Nodo: {{ s.deviceId }}</span>
           </div>
+          <button v-if="permisos.manageSensors" class="edit" @click="empezarEdicion(s)">Editar</button>
           <button v-if="permisos.manageSensors" class="del" title="Eliminar" @click="remove(s.id)">✕</button>
         </header>
+
+        <form v-if="edicion?.id === s.id" class="edit-form" @submit.prevent="guardarEdicion(s)">
+          <label>Nombre</label>
+          <input v-model="edicion.nombre" />
+          <label>Planta</label>
+          <select v-model="edicion.cropId">
+            <option value="">Sin planta</option>
+            <option v-for="c in cultivos" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+          </select>
+          <label>Identificador del nodo</label>
+          <input v-model="edicion.deviceId" placeholder="growhub-nodo-01" />
+          <div class="edit-actions">
+            <button type="button" class="ghost" @click="edicion = null">Cancelar</button>
+            <button type="submit" class="save" :disabled="!edicion.nombre.trim()">Guardar</button>
+          </div>
+        </form>
 
         <div class="value" :style="{ color: SENSOR_TYPES[s.tipo]?.color }">
           <template v-if="lastValue(s)">
@@ -49,7 +78,8 @@
           {{ busy[s.id] ? 'Registrando…' : '+ Simular lectura' }}
         </button>
       </div>
-    </div>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -64,7 +94,9 @@ import {
   getHuerto,
   getSensores,
   createSensor,
+  updateSensor,
   deleteSensor,
+  getCultivos,
   getLecturas,
   addLectura,
 } from '../services/firestoreService'
@@ -78,11 +110,33 @@ const permisos = computed(() => permisosEn(huerto.value, user.value?.uid))
 const sensores = ref([])
 const readings = reactive({}) // sensorId -> [lecturas]
 const busy = reactive({}) // sensorId -> bool
+const cultivos = ref([])
 const nombre = ref('')
 const tipo = ref('temperatura')
+const cropId = ref('')
+const deviceId = ref('')
+const edicion = ref(null)
 const loading = ref(true)
 const saving = ref(false)
 const error = ref('')
+
+// Un grupo por planta y, al final, los sensores sin planta (o de un cultivo ya
+// borrado). id vacío = sin planta.
+const grupos = computed(() => {
+  const conPlanta = cultivos.value
+    .map((c) => ({
+      id: c.id,
+      titulo: c.nombre,
+      sensores: sensores.value.filter((s) => s.cropId === c.id),
+    }))
+    .filter((g) => g.sensores.length)
+  const sinPlanta = sensores.value.filter(
+    (s) => !cultivos.value.some((c) => c.id === s.cropId),
+  )
+  return sinPlanta.length
+    ? [...conPlanta, { id: '', titulo: 'Sin planta', sensores: sinPlanta }]
+    : conPlanta
+})
 
 function lastValue(s) {
   const arr = readings[s.id]
@@ -97,9 +151,10 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    ;[huerto.value, sensores.value] = await Promise.all([
+    ;[huerto.value, sensores.value, cultivos.value] = await Promise.all([
       getHuerto(orchardId),
       getSensores(orchardId),
+      getCultivos(orchardId),
     ])
     await Promise.all(sensores.value.map((s) => loadReadings(s.id)))
   } catch (e) {
@@ -119,14 +174,43 @@ async function add() {
       nombre: nombre.value.trim(),
       tipo: tipo.value,
       unidad: SENSOR_TYPES[tipo.value].unidad,
+      cropId: cropId.value || null,
+      deviceId: deviceId.value.trim(),
     })
     nombre.value = ''
+    deviceId.value = ''
     await load()
   } catch (e) {
     error.value = mensajeError(e, 'No se pudo crear el sensor.')
     console.error(e)
   } finally {
     saving.value = false
+  }
+}
+
+function empezarEdicion(s) {
+  edicion.value = {
+    id: s.id,
+    nombre: s.nombre,
+    cropId: cultivos.value.some((c) => c.id === s.cropId) ? s.cropId : '',
+    deviceId: s.deviceId || '',
+  }
+}
+
+async function guardarEdicion(s) {
+  const cambios = {
+    nombre: edicion.value.nombre.trim(),
+    cropId: edicion.value.cropId || null,
+    deviceId: edicion.value.deviceId.trim(),
+  }
+  error.value = ''
+  try {
+    await updateSensor(orchardId, s.id, cambios)
+    Object.assign(s, cambios)
+    edicion.value = null
+  } catch (e) {
+    error.value = mensajeError(e, 'No se pudo guardar el sensor.')
+    console.error(e)
   }
 }
 
@@ -184,6 +268,91 @@ h1 {
 .add-bar input {
   flex: 1;
   min-width: 160px;
+}
+.group {
+  margin-bottom: 30px;
+}
+.group-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 14px;
+  font-size: 1.2rem;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-border-soft);
+}
+.group-title a {
+  color: inherit;
+  text-decoration: none;
+}
+.group-title a:hover {
+  color: var(--color-primary);
+}
+.group-count {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-text-soft);
+}
+.device {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.78rem;
+  color: var(--color-text-soft);
+}
+.edit {
+  background: transparent;
+  border: none;
+  color: var(--color-primary-dark);
+  font-weight: 600;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.edit-form {
+  display: flex;
+  flex-direction: column;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-sm);
+}
+.edit-form label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  margin: 8px 0 4px;
+}
+.edit-form label:first-child {
+  margin-top: 0;
+}
+.edit-form input,
+.edit-form select {
+  padding: 8px 10px;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-sm);
+}
+.edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+.ghost {
+  background: transparent;
+  border: none;
+  color: var(--color-text-soft);
+  font-weight: 600;
+  cursor: pointer;
+}
+.save {
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.save:disabled {
+  opacity: 0.55;
 }
 .add-bar button {
   padding: 10px 20px;

@@ -34,6 +34,10 @@
             <router-link :to="`/orchard/${s.orchardId}`" class="orchard-link">
               {{ s.orchardNombre }}
             </router-link>
+            <router-link v-if="plantaDe(s)" :to="`/orchard/${s.orchardId}/crop/${s.cropId}`" class="plant">
+              · {{ plantaDe(s) }}
+            </router-link>
+            <span v-if="s.deviceId" class="device">Nodo: {{ s.deviceId }}</span>
           </div>
         </header>
 
@@ -69,6 +73,7 @@ import { SENSOR_TYPES, simularValor } from '../utils/sensorTypes'
 import {
   getHuertos,
   getAllSensores,
+  getCultivos,
   addLectura,
   getLecturas,
 } from '../services/firestoreService'
@@ -76,9 +81,12 @@ import {
 const { user } = useAuth()
 const huertos = ref([])
 const sensores = ref([])
+const cultivos = ref({}) // orchardId -> [cultivos]
 const busy = reactive({})
 const loading = ref(true)
 const error = ref('')
+
+const plantaDe = (s) => cultivos.value[s.orchardId]?.find((c) => c.id === s.cropId)?.nombre
 
 const puedeSimular = (s) =>
   permisosEn(huertos.value.find((h) => h.id === s.orchardId), user.value.uid).manageSensors
@@ -92,7 +100,12 @@ async function load() {
   error.value = ''
   try {
     huertos.value = await getHuertos(user.value.uid)
-    sensores.value = await getAllSensores(huertos.value)
+    const [todos, listas] = await Promise.all([
+      getAllSensores(huertos.value),
+      Promise.all(huertos.value.map((h) => getCultivos(h.id))),
+    ])
+    sensores.value = todos
+    cultivos.value = Object.fromEntries(huertos.value.map((h, i) => [h.id, listas[i]]))
   } catch (e) {
     error.value = 'No se pudieron cargar los sensores.'
     console.error(e)
@@ -172,6 +185,16 @@ onMounted(load)
   font-size: 0.8rem;
   text-decoration: none;
   color: var(--color-accent-green);
+}
+.plant {
+  font-size: 0.8rem;
+  text-decoration: none;
+  color: var(--color-text-soft);
+}
+.device {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--color-text-soft);
 }
 .value {
   font-size: 2.1rem;

@@ -10,7 +10,7 @@
         <h1>{{ huerto?.nombre || 'Huerto' }}</h1>
         <p v-if="huerto?.descripcion" class="hero-loc">{{ huerto.descripcion }}</p>
         <div class="hero-actions">
-          <router-link :to="`/orchard/${orchardId}/sensors`" class="hero-btn">Sensores</router-link>
+          <router-link v-if="huerto" :to="`/orchard/${orchardId}/sensors`" class="hero-btn">Sensores</router-link>
           <router-link v-if="huerto" :to="`/orchard/${orchardId}/members`" class="hero-btn">Miembros</router-link>
           <router-link v-if="permisos.admin" :to="`/orchard/${orchardId}/settings`" class="hero-btn">Ajustes</router-link>
         </div>
@@ -61,7 +61,7 @@
       <section class="panel">
         <h2 class="section-title">Tareas</h2>
 
-        <form v-if="permisos.manageTasks" class="inline-add" @submit.prevent="addTask">
+        <form v-if="permisos.manageTasks" class="inline-add task-add" @submit.prevent="addTask">
           <input v-model="taskTitulo" placeholder="Nueva tarea" />
           <select v-model="taskFrec" aria-label="Frecuencia de riego">
             <option v-for="f in FRECUENCIAS" :key="f" :value="f">{{ f }}</option>
@@ -485,6 +485,9 @@ onMounted(load)
   border: 1px solid var(--color-input-border);
   border-radius: var(--radius-sm);
   font-size: 0.9rem;
+}
+.task-add input {
+  flex: 1 1 100%;
 }
 .inline-add button {
   width: 40px;

@@ -107,6 +107,7 @@
 
         <p v-if="!sensoresCultivo.length" class="muted small">
           Este cultivo aún no tiene sensores vinculados.
+          <router-link v-if="permisos.manageSensors" :to="`/orchard/${orchardId}/sensors`">Crear un sensor</router-link>
         </p>
 
         <div class="metric-grid">
@@ -118,6 +119,7 @@
               <div class="meta">
                 <span class="label">{{ SENSOR_TYPES[s.tipo]?.label }}</span>
                 <strong>{{ s.nombre }}</strong>
+                <span v-if="s.deviceId" class="device">Nodo: {{ s.deviceId }}</span>
               </div>
               <button v-if="permisos.manageSensors" class="unlink" title="Desvincular" @click="desvincular(s)">✕</button>
             </header>
@@ -154,6 +156,7 @@ import {
   updateTarea,
   deleteTarea,
   autopublicarTarea,
+  getCultivos,
   getSensores,
   updateSensor,
   getLecturas,
@@ -172,6 +175,7 @@ const huerto = ref(null)
 const permisos = computed(() => permisosEn(huerto.value, user.value?.uid))
 const cultivo = ref(null)
 const sensores = ref([])
+const cultivosIds = ref([])
 const loading = ref(true)
 const editing = ref(false)
 const saving = ref(false)
@@ -190,7 +194,10 @@ const fFotoQuitada = ref(false)
 const fDesc = ref('')
 
 const sensoresCultivo = computed(() => sensores.value.filter((s) => s.cropId === cropId))
-const sensoresDisponibles = computed(() => sensores.value.filter((s) => !s.cropId))
+// Sin planta, o de un cultivo que ya se ha borrado.
+const sensoresDisponibles = computed(() =>
+  sensores.value.filter((s) => !cultivosIds.value.includes(s.cropId)),
+)
 
 async function cargarSensores() {
   const lista = await getSensores(orchardId)
@@ -212,8 +219,13 @@ async function load() {
       fFecha.value = cultivo.value.fechaSiembra || ''
       fDesc.value = cultivo.value.descripcion || ''
     }
-    const [todas] = await Promise.all([getTareas(orchardId), cargarSensores()])
+    const [todas, plantas] = await Promise.all([
+      getTareas(orchardId),
+      getCultivos(orchardId),
+      cargarSensores(),
+    ])
     tareas.value = todas.filter((t) => t.cropId === cropId)
+    cultivosIds.value = plantas.map((c) => c.id)
   } catch (e) {
     console.error(e)
   } finally {
@@ -536,6 +548,11 @@ onMounted(load)
   font-size: 1rem;
   color: var(--color-text-soft);
   margin-left: 4px;
+}
+.device {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--color-text-soft);
 }
 .unlink {
   background: transparent;

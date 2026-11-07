@@ -260,6 +260,8 @@ export const deleteCultivo = async (orchardId, cropId, fotoId = '') => {
 /* ----------------------------- Sensores ---------------------------- */
 // Sensores como subcolección del huerto: orchards/{id}/sensors
 // tipo: 'temperatura' | 'humedad' | 'luz' (define unidad y rango de simulación)
+// cropId: planta a la que mide (opcional). deviceId: identificador del nodo físico
+// (p. ej. "growhub-nodo-01"), para conectar después el sensor real.
 
 export const getSensores = async (orchardId) => {
   const q = query(
@@ -270,12 +272,13 @@ export const getSensores = async (orchardId) => {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
 }
 
-export const createSensor = async (orchardId, { nombre, tipo, unidad, cropId = null }) => {
+export const createSensor = async (orchardId, { nombre, tipo, unidad, cropId = null, deviceId = '' }) => {
   const ref = await addDoc(collection(db, 'orchards', orchardId, 'sensors'), {
     nombre,
     tipo,
     unidad,
     cropId,
+    deviceId,
     createdAt: serverTimestamp(),
   })
   return ref.id
