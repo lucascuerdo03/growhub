@@ -31,12 +31,19 @@
 
         <input v-model="search" class="search" placeholder="Buscar por nombre o especie…" />
 
-        <form v-if="permisos.manageCrops" class="inline-add" @submit.prevent="addCrop">
-          <input v-model="cropNombre" placeholder="Nuevo cultivo" />
-          <input v-model="cropEspecie" placeholder="Especie (opcional)" />
-          <button type="submit" :disabled="!cropNombre.trim() || guardandoCultivo">+</button>
-          <ImageUpload v-model="cropFoto" class="inline-photo" />
-        </form>
+        <template v-if="permisos.manageCrops">
+          <BuscadorCultivo v-if="!nuevo" @elegir="elegirEntrada" @personalizado="elegirPersonalizado" />
+          <div v-else class="nuevo-cultivo">
+            <h3>{{ nuevo.entrada ? nuevo.entrada.nombre : `Cultivo personalizado` }}</h3>
+            <FormularioCultivo
+              :entrada="nuevo.entrada"
+              :nombre-inicial="nuevo.nombre"
+              :huertos="[huerto]"
+              @guardado="nuevo = null"
+              @cancelar="nuevo = null"
+            />
+          </div>
+        </template>
 
         <p v-if="!cultivosFiltrados.length" class="muted small">
           {{ cultivos.length ? 'Sin resultados.' : 'Este huerto aún no tiene cultivos.' }}
@@ -163,12 +170,13 @@ import { useVivo } from '../composables/useVivo'
 import ImageUpload from '../components/ImageUpload.vue'
 import StoredImage from '../components/StoredImage.vue'
 import UserAvatar from '../components/UserAvatar.vue'
+import BuscadorCultivo from '../components/BuscadorCultivo.vue'
+import FormularioCultivo from '../components/FormularioCultivo.vue'
 import { nombreRol, mensajeError } from '../utils/permissions'
 import {
   fuenteCultivos,
   fuenteTareas,
   fuentePosts,
-  createCultivo,
   deleteCultivo,
   createTarea,
   updateTarea,
@@ -194,10 +202,8 @@ const { datos: posts, error: errorPosts } = useVivo(siHay(fuentePosts))
 const error = ref('')
 
 const search = ref('')
-const cropNombre = ref('')
-const cropEspecie = ref('')
-const cropFoto = ref('')
-const guardandoCultivo = ref(false)
+// Cultivo que se está añadiendo: { entrada, nombre }.
+const nuevo = ref(null)
 const taskTitulo = ref('')
 const taskFrec = ref('Cada 2-3 días')
 const taskCrop = ref('')
@@ -245,26 +251,8 @@ function autorInfo() {
   }
 }
 
-async function addCrop() {
-  if (!cropNombre.value.trim()) return
-  guardandoCultivo.value = true
-  error.value = ''
-  let fotoId = ''
-  try {
-    if (cropFoto.value) fotoId = await createFoto(orchardId, cropFoto.value)
-    const datos = { nombre: cropNombre.value.trim(), especie: cropEspecie.value.trim(), fotoId }
-    cropNombre.value = ''
-    cropEspecie.value = ''
-    cropFoto.value = ''
-    await createCultivo(orchardId, datos)
-  } catch (e) {
-    await limpiarFoto(orchardId, fotoId, '')
-    error.value = mensajeError(e, 'No se pudo crear el cultivo.')
-    console.error(e)
-  } finally {
-    guardandoCultivo.value = false
-  }
-}
+const elegirEntrada = (entrada) => (nuevo.value = { entrada, nombre: entrada.nombre })
+const elegirPersonalizado = (nombre) => (nuevo.value = { entrada: null, nombre })
 
 async function removeCrop(c) {
   if (!confirm('¿Eliminar este cultivo?')) return
@@ -469,6 +457,15 @@ async function removePost(p) {
 .inline-add button:disabled {
   opacity: 0.5;
   cursor: default;
+}
+.nuevo-cultivo {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  margin-bottom: 14px;
+}
+.nuevo-cultivo h3 {
+  margin: 0 0 4px;
 }
 .crop-card {
   display: flex;

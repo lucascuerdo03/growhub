@@ -24,14 +24,41 @@
           </div>
           <p v-if="cultivo.descripcion" class="desc">{{ cultivo.descripcion }}</p>
 
-          <dl class="datos">
+          <dl v-if="entrada" class="datos">
+            <div><dt>Riego</dt><dd>{{ entrada.riego }}</dd></div>
+            <div><dt>Exposición</dt><dd>{{ entrada.sol }}</dd></div>
+            <div><dt>Temperatura ideal</dt><dd>{{ entrada.tempIdeal }}</dd></div>
+            <div><dt>Marco de plantación</dt><dd>{{ entrada.marco }}</dd></div>
+            <div><dt>Hasta la cosecha</dt><dd>{{ textoCosecha(entrada) }}</dd></div>
+            <div><dt>Dificultad</dt><dd>{{ entrada.dificultad }}</dd></div>
+          </dl>
+          <!-- Cultivos añadidos antes de enlazarse con la biblioteca. -->
+          <dl v-else class="datos">
             <div v-if="cultivo.epocaSiembra"><dt>Época de siembra</dt><dd>{{ cultivo.epocaSiembra }}</dd></div>
             <div v-if="cultivo.riego"><dt>Riego</dt><dd>{{ cultivo.riego }}</dd></div>
             <div v-if="cultivo.tempIdeal"><dt>Temperatura ideal</dt><dd>{{ cultivo.tempIdeal }}</dd></div>
             <div v-if="cultivo.plagas"><dt>Plagas comunes</dt><dd>{{ cultivo.plagas }}</dd></div>
             <div v-if="cultivo.tiempoCosecha"><dt>Tiempo hasta cosecha</dt><dd>{{ cultivo.tiempoCosecha }}</dd></div>
           </dl>
+          <router-link v-if="entrada" :to="`/biblioteca/${entrada.id}`" class="ver-biblioteca">
+            Ver la ficha completa en la biblioteca
+          </router-link>
         </div>
+      </section>
+
+      <section v-if="entrada" class="card">
+        <h2 class="section-title">Calendario</h2>
+        <CalendarioCultivo :entrada="entrada" />
+      </section>
+
+      <section v-if="entrada" class="card">
+        <h2 class="section-title">Plagas y enfermedades</h2>
+        <ul class="plagas">
+          <li v-for="p in entrada.plagas" :key="p.nombre">
+            <strong>{{ p.nombre }}</strong>
+            <span>{{ p.tratamiento }}</span>
+          </li>
+        </ul>
       </section>
 
       <!-- Edición -->
@@ -144,6 +171,8 @@ import { Leaf } from 'lucide-vue-next'
 import SensorChart from '../components/SensorChart.vue'
 import ImageUpload from '../components/ImageUpload.vue'
 import StoredImage from '../components/StoredImage.vue'
+import CalendarioCultivo from '../components/CalendarioCultivo.vue'
+import { entradaDeCultivo, textoCosecha } from '../data/cropsLibrary'
 import { SENSOR_TYPES } from '../utils/sensorTypes'
 import { useAuth } from '../composables/useAuth'
 import { useHuerto } from '../composables/useHuertos'
@@ -183,6 +212,7 @@ const { porClave: lecturasPorClave } = useVivoMuchos(() =>
 )
 
 const cultivo = computed(() => cultivos.value.find((c) => c.id === cropId) || null)
+const entrada = computed(() => entradaDeCultivo(cultivo.value))
 const tareas = computed(() => todasTareas.value.filter((t) => t.cropId === cropId))
 const sensores = computed(() =>
   todosSensores.value.map((s) => ({
@@ -403,6 +433,32 @@ async function desvincular(s) {
   margin: 0;
   font-weight: 600;
   text-align: right;
+}
+.ver-biblioteca {
+  display: inline-block;
+  margin-top: 12px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+.plagas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.plagas li {
+  display: flex;
+  flex-direction: column;
+  padding: 9px 0;
+  border-top: 1px solid var(--color-border-soft);
+}
+.plagas li:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+.plagas span {
+  font-size: 0.88rem;
+  color: var(--color-text-soft);
 }
 .section-title {
   margin: 0 0 16px;
