@@ -20,6 +20,8 @@ import {
 } from 'firebase/firestore'
 import { db, auth } from '../firebase'
 import { miembroConRol } from '../utils/permissions'
+import { hoyISO } from '../utils/fechas'
+import { frecuenciaDe, siguienteFecha } from '../utils/tareas'
 
 // Documentos de un snapshot. `estimate` da fecha también a lo recién escrito, que
 // aún no tiene la hora del servidor.
@@ -272,7 +274,7 @@ export const crearCultivoConTareas = async (orchardId, datos, tareas = []) => {
       descripcion: '',
       cropId: refCultivo.id,
       fecha: t.fecha || '',
-      frecuenciaRiego: t.frecuenciaRiego || '',
+      frecuencia: t.frecuencia || '',
       responsable: '',
       completada: false,
       createdAt: serverTimestamp(),
@@ -374,7 +376,8 @@ export const createTarea = async (orchardId, data) => {
     cropId: data.cropId || null,
     // Día previsto (AAAA-MM-DD) o vacío si no tiene fecha.
     fecha: data.fecha || '',
-    frecuenciaRiego: data.frecuenciaRiego || '',
+    // Cada cuánto se repite (ver FRECUENCIAS en utils/tareas.js); vacío, no se repite.
+    frecuencia: data.frecuencia || '',
     responsable: data.responsable || '',
     completada: false,
     createdAt: serverTimestamp(),
@@ -384,6 +387,46 @@ export const createTarea = async (orchardId, data) => {
 
 export const updateTarea = (orchardId, taskId, data) =>
   updateDoc(doc(db, 'orchards', orchardId, 'tasks', taskId), data)
+
+// Valor guardado tal cual, aunque sea null: las reglas comprueban que la
+// siguiente tarea copia exactamente la anterior.
+const campo = (t, clave, porDefecto) => (clave in t ? t[clave] : porDefecto)
+
+// Completar una tarea. Si se repite, en el mismo lote se crea la siguiente (mismo
+// cultivo y responsable) y la completada guarda su id: así, si se desmarca y se
+// vuelve a marcar, no se crea otra. Devuelve la fecha de la siguiente, si la hay.
+export async function completarTarea(orchardId, t) {
+  const ref = doc(db, 'orchards', orchardId, 'tasks', t.id)
+  const hoy = hoyISO()
+  if (!frecuenciaDe(t) || t.siguienteId) {
+    await updateDoc(ref, { completada: true, completadaEl: hoy })
+    return ''
+  }
+  const fecha = siguienteFecha(t, hoy)
+  const siguiente = doc(collection(db, 'orchards', orchardId, 'tasks'))
+  const batch = writeBatch(db)
+  batch.update(ref, { completada: true, completadaEl: hoy, siguienteId: siguiente.id })
+  batch.set(siguiente, {
+    titulo: t.titulo,
+    descripcion: campo(t, 'descripcion', ''),
+    cropId: campo(t, 'cropId', null),
+    fecha,
+    frecuencia: t.frecuencia,
+    responsable: campo(t, 'responsable', ''),
+    completada: false,
+    anteriorId: t.id,
+    createdAt: serverTimestamp(),
+  })
+  await batch.commit()
+  return fecha
+}
+
+// Desmarcar: vuelve a pendiente. La siguiente, si se creó, se queda.
+export const descompletarTarea = (orchardId, taskId) =>
+  updateDoc(doc(db, 'orchards', orchardId, 'tasks', taskId), {
+    completada: false,
+    completadaEl: deleteField(),
+  })
 
 export const deleteTarea = (orchardId, taskId) =>
   deleteDoc(doc(db, 'orchards', orchardId, 'tasks', taskId))

@@ -238,6 +238,20 @@ await permitido('crea tarea', async () => {
   tareaB = await addDoc(sub(b, id, 'tasks'), { titulo: 't', completada: false })
 })
 await permitido('completa tarea', () => updateDoc(tareaB, { completada: true }))
+await permitido('completa una tarea que se repite y crea la siguiente', async () => {
+  const t = await addDoc(sub(b, id, 'tasks'), {
+    titulo: 'Abonar', descripcion: '', cropId: null, fecha: '2026-01-01',
+    frecuencia: 'mensual', responsable: '', completada: false, createdAt: serverTimestamp(),
+  })
+  const sig = doc(sub(b, id, 'tasks'))
+  const batch = writeBatch(b.db)
+  batch.update(t, { completada: true, completadaEl: '2026-01-02', siguienteId: sig.id })
+  batch.set(sig, {
+    titulo: 'Abonar', descripcion: '', cropId: null, fecha: '2026-02-01',
+    frecuencia: 'mensual', responsable: '', completada: false, anteriorId: t.id, createdAt: serverTimestamp(),
+  })
+  await batch.commit()
+})
 await permitido('crea sensor', () => addDoc(sub(b, id, 'sensors'), { nombre: 's' }))
 await permitido('publica a su nombre', () => addDoc(sub(b, id, 'posts'), { texto: 'x', autorId: b.uid }))
 await rechazado('publica a nombre de otro', () => addDoc(sub(b, id, 'posts'), { texto: 'x', autorId: a.uid }))
@@ -278,11 +292,68 @@ await permitido('completa tarea', () => updateDoc(tareaB, { completada: false })
 await rechazado('pero no puede cambiar otros campos', () =>
   updateDoc(tareaB, { completada: true, titulo: 'cambiado' }))
 await rechazado('ni crear tareas', () => addDoc(sub(b, id, 'tasks'), { titulo: 't' }))
+
+console.log('\n--- Tareas que se repiten, con solo "completar tareas" ---')
+const datosRepite = {
+  titulo: 'Regar',
+  descripcion: '',
+  cropId: null,
+  fecha: '2026-01-01',
+  frecuencia: 'semanal',
+  responsable: '',
+  completada: false,
+}
+// Lo que hace completarTarea(): completa la tarea y crea la siguiente en un lote.
+function completarConSiguiente(u, taskId, cambios = {}) {
+  const sig = doc(sub(u, id, 'tasks'))
+  const batch = writeBatch(u.db)
+  batch.update(doc(u.db, 'orchards', id, 'tasks', taskId), {
+    completada: true,
+    completadaEl: '2026-01-02',
+    siguienteId: sig.id,
+  })
+  batch.set(sig, { ...datosRepite, fecha: '2026-01-09', anteriorId: taskId, createdAt: serverTimestamp(), ...cambios })
+  return batch.commit().then(() => sig.id)
+}
+const repite = await addDoc(sub(a, id, 'tasks'), { ...datosRepite, createdAt: serverTimestamp() })
+const noRepite = await addDoc(sub(a, id, 'tasks'), { ...datosRepite, frecuencia: '', createdAt: serverTimestamp() })
+const repiteB = doc(b.db, 'orchards', id, 'tasks', repite.id)
+let siguienteId
+await rechazado('crea una tarea suelta haciéndola pasar por siguiente', () =>
+  addDoc(sub(b, id, 'tasks'), { ...datosRepite, anteriorId: repite.id, createdAt: serverTimestamp() }))
+await rechazado('enlaza una siguiente que no existe', () =>
+  updateDoc(repiteB, { completada: true, siguienteId: 'inventada' }))
+await rechazado('la siguiente cambia el título', () => completarConSiguiente(b, repite.id, { titulo: 'Otra' }))
+await rechazado('la siguiente cambia de cultivo', () => completarConSiguiente(b, repite.id, { cropId: 'otro' }))
+await rechazado('la siguiente cambia de responsable', () => completarConSiguiente(b, repite.id, { responsable: b.uid }))
+await rechazado('la siguiente nace completada', () => completarConSiguiente(b, repite.id, { completada: true }))
+await rechazado('la siguiente lleva campos de más', () => completarConSiguiente(b, repite.id, { extra: 1 }))
+await rechazado('una tarea que no se repite no crea siguiente', () => completarConSiguiente(b, noRepite.id))
+await permitido('completa y crea la siguiente', async () => {
+  siguienteId = await completarConSiguiente(b, repite.id)
+})
+await permitido('la siguiente queda pendiente, con la nueva fecha', async () => {
+  const d = (await getDoc(doc(b.db, 'orchards', id, 'tasks', siguienteId))).data()
+  if (d.completada !== false || d.fecha !== '2026-01-09' || d.anteriorId !== repite.id) throw new Error('datos')
+})
+await permitido('la desmarca', () => updateDoc(repiteB, { completada: false, completadaEl: deleteField() }))
+await rechazado('al volver a completarla no crea otra', () => completarConSiguiente(b, repite.id))
+await rechazado('ni cambia el enlace a la siguiente', () =>
+  updateDoc(repiteB, { completada: true, siguienteId: 'otra' }))
+await permitido('la vuelve a completar sin crear otra', () =>
+  updateDoc(repiteB, { completada: true, completadaEl: '2026-01-03' }))
+await rechazado('no cambia la frecuencia', () =>
+  updateDoc(doc(b.db, 'orchards', id, 'tasks', siguienteId), { frecuencia: '' }))
 await permitido('el propietario da solo "gestionar tareas"', () =>
   updateDoc(huertoRef(a, id), {
     [`members.${b.uid}`]: { role: 'lector', permissions: { ...ROLES.lector.permissions, manageTasks: true } },
   }))
 await permitido('edita el título', () => updateDoc(tareaB, { titulo: 'nuevo' }))
+await permitido('cambia la frecuencia o deja de repetirla', async () => {
+  await updateDoc(tareaB, { frecuencia: 'mensual' })
+  await updateDoc(tareaB, { frecuencia: '' })
+})
+await rechazado('pero no toca el enlace a la siguiente', () => updateDoc(tareaB, { siguienteId: 'x' }))
 await rechazado('pero no completa', () => updateDoc(tareaB, { completada: true }))
 
 console.log('\n--- Administrador ---')

@@ -190,14 +190,50 @@ service cloud.firestore {
       }
 
       match /tasks/{taskId} {
+        function rutaTarea(id) {
+          return /databases/$(database)/documents/orchards/$(orchardId)/tasks/$(id);
+        }
+        // Completar o desmarcar. Si al completarla se enlaza la siguiente
+        // (tarea que se repite), esa siguiente tiene que crearse en el mismo lote.
+        function soloCompletar() {
+          let cambios = request.resource.data.diff(resource.data).affectedKeys();
+          return cambios.hasOnly(['completada', 'completadaEl', 'siguienteId'])
+            && (!cambios.hasAny(['siguienteId'])
+                || (!('siguienteId' in resource.data)
+                    && request.resource.data.completada == true
+                    && getAfter(rutaTarea(request.resource.data.siguienteId)).data.anteriorId == taskId));
+        }
+        // La siguiente de una tarea que se repite: copia de la anterior con otra
+        // fecha, creada en el mismo lote en que se completa la anterior. Así quien
+        // solo puede completar tareas no puede crear otras a su gusto.
+        function esSiguiente() {
+          let n = request.resource.data;
+          let antes = get(rutaTarea(n.anteriorId)).data;
+          let despues = getAfter(rutaTarea(n.anteriorId)).data;
+          return n.keys().hasOnly(['titulo', 'descripcion', 'cropId', 'fecha', 'frecuencia',
+                                   'responsable', 'completada', 'anteriorId', 'createdAt'])
+            && antes.completada == false
+            && !('siguienteId' in antes)
+            && despues.completada == true
+            && despues.siguienteId == taskId
+            && antes.get('frecuencia', '') != ''
+            && n.frecuencia == antes.frecuencia
+            && n.titulo == antes.titulo
+            && n.descripcion == antes.get('descripcion', '')
+            && n.cropId == antes.get('cropId', null)
+            && n.responsable == antes.get('responsable', '')
+            && n.completada == false
+            && n.fecha is string;
+        }
+
         allow read: if miembro();
-        allow create, delete: if puede('manageTasks');
+        allow create: if puede('manageTasks') || (puede('completeTasks') && esSiguiente());
+        allow delete: if puede('manageTasks');
         // "Completar" y "gestionar" son permisos independientes.
-        allow update: if
-          (puede('completeTasks')
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['completada']))
+        allow update: if (puede('completeTasks') && soloCompletar())
           || (puede('manageTasks')
-            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['completada']));
+            && !request.resource.data.diff(resource.data).affectedKeys()
+                  .hasAny(['completada', 'completadaEl', 'siguienteId']));
       }
 
       match /sensors/{sensorId} {

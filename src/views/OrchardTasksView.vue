@@ -18,9 +18,9 @@
         </label>
 
         <label>
-          <span>Frecuencia de riego</span>
-          <select v-model="frecuenciaRiego">
-            <option v-for="f in FRECUENCIAS" :key="f" :value="f">{{ f }}</option>
+          <span>Se repite</span>
+          <select v-model="frecuencia">
+            <option v-for="f in FRECUENCIAS" :key="f.valor" :value="f.valor">{{ f.texto }}</option>
           </select>
         </label>
       </div>
@@ -40,18 +40,17 @@
       <option v-for="c in cultivos" :key="c.id" :value="c.id">{{ c.nombre }}</option>
     </select>
     <p v-if="!tareasFiltradas.length" class="muted">No hay tareas para esta planta.</p>
-    <TransitionGroup name="tarea-lista" tag="div" class="list">
-      <TaskItem
-        v-for="t in tareasFiltradas"
-        :key="t.id"
-        :tarea="t"
-        :planta="plantaDe(t)"
-        :puede-completar="permisos.completeTasks"
-        :puede-borrar="permisos.manageTasks"
-        @toggle="toggle"
-        @remove="remove"
-      />
-    </TransitionGroup>
+    <p v-if="aviso" class="aviso-tarea" role="status">{{ aviso }}</p>
+    <ListaTareas
+      v-if="tareasFiltradas.length"
+      class="list"
+      :tareas="tareasFiltradas"
+      :planta-de="plantaDe"
+      :permisos-de="() => permisos"
+      @toggle="alternar"
+      @remove="borrar"
+      @frecuencia="cambiarFrecuencia"
+    />
     </template>
   </div>
 </template>
@@ -59,26 +58,21 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { useAuth } from '../composables/useAuth'
 import { useHuerto } from '../composables/useHuertos'
 import { useVivo } from '../composables/useVivo'
 import { mensajeError } from '../utils/permissions'
 import { hoyISO } from '../utils/fechas'
-import TaskItem from '../components/TaskItem.vue'
+import { FRECUENCIAS } from '../utils/tareas'
+import { useAccionesTarea } from '../composables/useAccionesTarea'
+import ListaTareas from '../components/ListaTareas.vue'
 import {
   fuenteCultivos,
   fuenteTareas,
   createTarea,
-  updateTarea,
-  deleteTarea,
-  autopublicarTarea,
 } from '../services/firestoreService'
-
-const FRECUENCIAS = ['Sin riego', 'Diario', 'Cada 2-3 días', 'Semanal', 'Solo en sequía']
 
 const route = useRoute()
 const orchardId = route.params.id
-const { user } = useAuth()
 const { huerto, permisos, listo } = useHuerto(orchardId)
 
 const siHay = (fuente) => () => (huerto.value ? fuente(orchardId) : null)
@@ -88,11 +82,12 @@ const { datos: tareas } = useVivo(siHay(fuenteTareas))
 const titulo = ref('')
 const descripcion = ref('')
 const cropId = ref(null)
-const frecuenciaRiego = ref('Cada 2-3 días')
+const frecuencia = ref('')
 const fecha = ref(hoyISO())
 const saving = ref(false)
 const error = ref('')
 const filtroPlanta = ref('')
+const aviso = ref('')
 
 const cultivoDe = (t) => cultivos.value.find((c) => c.id === t.cropId)
 const plantaDe = (t) => cultivoDe(t)?.nombre || 'General'
@@ -109,7 +104,7 @@ async function add() {
     titulo: titulo.value.trim(),
     descripcion: descripcion.value.trim(),
     cropId: cropId.value,
-    frecuenciaRiego: frecuenciaRiego.value,
+    frecuencia: frecuencia.value,
     fecha: fecha.value,
   }
   titulo.value = ''
@@ -129,31 +124,12 @@ async function add() {
   }
 }
 
-async function toggle(t) {
-  const nuevo = !t.completada
-  error.value = ''
-  try {
-    await updateTarea(orchardId, t.id, { completada: nuevo })
-  } catch (e) {
-    error.value = mensajeError(e, 'No se pudo actualizar la tarea.')
-    console.error(e)
-    return
-  }
-  if (nuevo && permisos.value.publishPosts) {
-    await autopublicarTarea(orchardId, t.titulo, user.value)
-  }
-}
-
-async function remove(t) {
-  if (!confirm('¿Eliminar esta tarea?')) return
-  error.value = ''
-  try {
-    await deleteTarea(orchardId, t.id)
-  } catch (e) {
-    error.value = mensajeError(e, 'No se pudo eliminar la tarea.')
-    console.error(e)
-  }
-}
+const { alternar, cambiarFrecuencia, borrar } = useAccionesTarea({
+  orchardIdDe: () => orchardId,
+  permisosDe: () => permisos.value,
+  error,
+  aviso,
+})
 </script>
 
 <style scoped>

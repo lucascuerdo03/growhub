@@ -43,7 +43,7 @@
         <input v-model="marcadas" type="checkbox" :value="t.clave" />
         <span class="tarea-titulo">
           {{ t.titulo }}
-          <span v-if="t.frecuenciaRiego" class="tarea-frecuencia">{{ t.frecuenciaRiego.toLowerCase() }}</span>
+          <span v-if="frecuenciaDe(t)" class="tarea-frecuencia">{{ frecuenciaDe(t).texto.toLowerCase() }}</span>
         </span>
         <span class="tarea-fecha">{{ fechaCorta(fechaDe(t)) }}</span>
       </label>
@@ -69,6 +69,7 @@ import { tareasRecomendadas } from '../data/cropsLibrary'
 import { crearCultivoConTareas, createFoto, limpiarFoto } from '../services/firestoreService'
 import { fechaCorta, hoyISO, sumarDias } from '../utils/fechas'
 import { mensajeError, permisosEn } from '../utils/permissions'
+import { frecuenciaDe } from '../utils/tareas'
 
 const props = defineProps({
   // Entrada de la biblioteca, o null si es un cultivo personalizado.
@@ -120,7 +121,7 @@ async function guardar() {
     const elegidas = puedeTareas.value
       ? tareas.value
           .filter((t) => marcadas.value.includes(t.clave))
-          .map((t) => ({ titulo: t.titulo, fecha: fechaDe(t), frecuenciaRiego: t.frecuenciaRiego || '' }))
+          .map((t) => ({ titulo: t.titulo, fecha: fechaDe(t), frecuencia: t.frecuencia || '' }))
       : []
     const cropId = await crearCultivoConTareas(
       orchardId,

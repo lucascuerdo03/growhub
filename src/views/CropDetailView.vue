@@ -111,28 +111,26 @@
         <form v-if="permisos.manageTasks" class="link-row" @submit.prevent="addTask">
           <input v-model="taskTitulo" class="task-input" placeholder="Nueva tarea para esta planta" />
           <input v-model="taskFecha" class="task-date" type="date" aria-label="Fecha de la tarea" />
-          <select v-model="taskFrec" aria-label="Frecuencia de riego">
-            <option v-for="f in FRECUENCIAS" :key="f" :value="f">{{ f }}</option>
+          <select v-model="taskFrec" aria-label="Se repite">
+            <option v-for="f in FRECUENCIAS" :key="f.valor" :value="f.valor">{{ f.texto }}</option>
           </select>
           <button type="submit" class="primary" :disabled="!taskTitulo.trim()">Añadir tarea</button>
         </form>
 
         <p v-if="taskError" class="error">{{ taskError }}</p>
+        <p v-if="avisoTarea" class="aviso-tarea" role="status">{{ avisoTarea }}</p>
         <div v-if="!tareas.length" class="vacio">
           <Ilustracion tipo="tareas" />
           <p>Este cultivo aún no tiene tareas.</p>
         </div>
-        <TransitionGroup name="tarea-lista" tag="div">
-          <TaskItem
-            v-for="t in tareas"
-            :key="t.id"
-            :tarea="t"
-            :puede-completar="permisos.completeTasks"
-            :puede-borrar="permisos.manageTasks"
-            @toggle="toggleTask"
-            @remove="removeTask"
-          />
-        </TransitionGroup>
+        <ListaTareas
+          v-else
+          :tareas="tareas"
+          :permisos-de="() => permisos"
+          @toggle="alternar"
+          @remove="borrar"
+          @frecuencia="cambiarFrecuencia"
+        />
       </section>
 
       <!-- Sensores vinculados -->
@@ -188,13 +186,14 @@ import SensorChart from '../components/SensorChart.vue'
 import ImageUpload from '../components/ImageUpload.vue'
 import StoredImage from '../components/StoredImage.vue'
 import CalendarioCultivo from '../components/CalendarioCultivo.vue'
-import TaskItem from '../components/TaskItem.vue'
+import ListaTareas from '../components/ListaTareas.vue'
+import { FRECUENCIAS } from '../utils/tareas'
+import { useAccionesTarea } from '../composables/useAccionesTarea'
 import Ilustracion from '../components/Ilustracion.vue'
 import { entradaDeCultivo, textoCosecha } from '../data/cropsLibrary'
 import { ETAPAS, estadoCultivo } from '../utils/cultivos'
 import { fechaCorta, hoyISO } from '../utils/fechas'
 import { SENSOR_TYPES } from '../utils/sensorTypes'
-import { useAuth } from '../composables/useAuth'
 import { useHuerto } from '../composables/useHuertos'
 import { useVivo, useVivoMuchos } from '../composables/useVivo'
 import { mensajeError } from '../utils/permissions'
@@ -205,20 +204,15 @@ import {
   fuenteLecturas,
   updateCultivo,
   createTarea,
-  updateTarea,
-  deleteTarea,
-  autopublicarTarea,
   updateSensor,
   resolverFoto,
   limpiarFoto,
 } from '../services/firestoreService'
 
-const FRECUENCIAS = ['Sin riego', 'Diario', 'Cada 2-3 días', 'Semanal', 'Solo en sequía']
 
 const route = useRoute()
 const orchardId = route.params.id
 const cropId = route.params.cropId
-const { user } = useAuth()
 const { huerto, permisos, listo } = useHuerto(orchardId)
 
 // Sin consultas where + orderBy (pedirían un índice compuesto): se escucha la
@@ -252,9 +246,16 @@ const saving = ref(false)
 const savedMsg = ref('')
 const sensorAVincular = ref(null)
 const taskTitulo = ref('')
-const taskFrec = ref('Cada 2-3 días')
+const taskFrec = ref('')
 const taskFecha = ref(hoyISO())
 const taskError = ref('')
+const avisoTarea = ref('')
+const { alternar, cambiarFrecuencia, borrar } = useAccionesTarea({
+  orchardIdDe: () => orchardId,
+  permisosDe: () => permisos.value,
+  error: taskError,
+  aviso: avisoTarea,
+})
 
 const fNombre = ref('')
 const fEspecie = ref('')
@@ -313,7 +314,7 @@ async function addTask() {
   taskError.value = ''
   taskTitulo.value = ''
   try {
-    await createTarea(orchardId, { titulo, frecuenciaRiego: taskFrec.value, cropId, fecha: taskFecha.value })
+    await createTarea(orchardId, { titulo, frecuencia: taskFrec.value, cropId, fecha: taskFecha.value })
   } catch (e) {
     taskTitulo.value = titulo
     taskError.value = mensajeError(e, 'No se pudo crear la tarea.')
@@ -321,31 +322,6 @@ async function addTask() {
   }
 }
 
-async function toggleTask(t) {
-  const nuevo = !t.completada
-  taskError.value = ''
-  try {
-    await updateTarea(orchardId, t.id, { completada: nuevo })
-  } catch (e) {
-    taskError.value = mensajeError(e, 'No se pudo actualizar la tarea.')
-    console.error(e)
-    return
-  }
-  if (nuevo && permisos.value.publishPosts) {
-    await autopublicarTarea(orchardId, t.titulo, user.value)
-  }
-}
-
-async function removeTask(t) {
-  if (!confirm('¿Eliminar esta tarea?')) return
-  taskError.value = ''
-  try {
-    await deleteTarea(orchardId, t.id)
-  } catch (e) {
-    taskError.value = mensajeError(e, 'No se pudo eliminar la tarea.')
-    console.error(e)
-  }
-}
 
 async function vincular() {
   if (!sensorAVincular.value) return

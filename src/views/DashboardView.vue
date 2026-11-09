@@ -41,24 +41,32 @@
       <div v-else class="columnas">
         <section class="tareas" aria-labelledby="t-tareas">
           <div class="titulo-seccion">
-            <h2 id="t-tareas">Tareas de hoy</h2>
+            <h2 id="t-tareas">Tareas</h2>
             <router-link to="/tasks">Ver todas</router-link>
           </div>
-          <TransitionGroup v-if="deHoy.length" name="tarea-lista" tag="div" class="lista-tareas">
-            <TaskItem
-              v-for="t in deHoy"
-              :key="t.orchardId + t.id"
-              :tarea="t"
-              :planta="plantaDe(t)"
-              :huerto="t.huerto"
-              :puede-completar="permisosDe(t).completeTasks"
-              @toggle="completar"
-            />
-          </TransitionGroup>
-          <div v-else class="vacio-seccion">
-            <Ilustracion tipo="tareas" />
-            <p>Nada pendiente para hoy.<template v-if="proximaTarea"> La próxima: {{ proximaTarea.titulo }}, {{ textoVencimiento(proximaTarea.fecha).toLowerCase() }}.</template></p>
-          </div>
+          <p v-if="aviso" class="aviso-tarea" role="status">{{ aviso }}</p>
+          <ListaTareas
+            :tareas="paraPanel"
+            :historial="false"
+            :max-proximas="5"
+            :clave-de="(t) => t.orchardId + t.id"
+            :planta-de="plantaDe"
+            :huerto-de="(t) => t.huerto"
+            :permisos-de="permisosDe"
+            @toggle="alternar"
+            @remove="borrar"
+            @frecuencia="cambiarFrecuencia"
+          >
+            <template #vacio>
+              <div class="vacio-seccion">
+                <Ilustracion tipo="tareas" />
+                <p>Nada pendiente esta semana.<template v-if="proximaTarea"> La próxima: {{ proximaTarea.titulo }}, el {{ fechaCorta(proximaTarea.fecha) }}.</template></p>
+              </div>
+            </template>
+            <template #mas="{ ocultas }">
+              <router-link to="/tasks">{{ ocultas }} {{ ocultas === 1 ? 'próxima más' : 'próximas más' }}</router-link>
+            </template>
+          </ListaTareas>
           <p v-if="sinFecha" class="pie-seccion">
             <router-link to="/tasks">{{ sinFecha }} {{ sinFecha === 1 ? 'tarea' : 'tareas' }} sin fecha</router-link>
           </p>
@@ -177,15 +185,16 @@ import BaseModal from '../components/BaseModal.vue'
 import Ilustracion from '../components/Ilustracion.vue'
 import ImageUpload from '../components/ImageUpload.vue'
 import StoredImage from '../components/StoredImage.vue'
-import TaskItem from '../components/TaskItem.vue'
+import ListaTareas from '../components/ListaTareas.vue'
+import { porFecha } from '../utils/tareas'
+import { useAccionesTarea } from '../composables/useAccionesTarea'
 import TiempoHuerto from '../components/TiempoHuerto.vue'
 import { CROPS_LIBRARY, MESES_LARGOS, entradaDeCultivo, sePuedeSembrar } from '../data/cropsLibrary'
 import { estadoCultivo } from '../utils/cultivos'
-import { hoyISO, mesActual, textoVencimiento } from '../utils/fechas'
+import { fechaCorta, hoyISO, mesActual, sumarDias } from '../utils/fechas'
 import { mensajeError, nombreRol, permisosEn, rolEn } from '../utils/permissions'
 import { SENSOR_TYPES } from '../utils/sensorTypes'
 import {
-  autopublicarTarea,
   createFoto,
   createHuerto,
   deleteHuerto,
@@ -194,7 +203,6 @@ import {
   fuenteSensores,
   fuenteTareas,
   updateHuerto,
-  updateTarea,
 } from '../services/firestoreService'
 
 const LocationMap = defineAsyncComponent(() => import('../components/LocationMap.vue'))
@@ -227,18 +235,14 @@ const pendientes = computed(() =>
       .map((t) => ({ ...t, orchardId: h.id, huerto: lista.value.length > 1 ? h : null, huertoReal: h })),
   ),
 )
-const deHoy = computed(() =>
-  pendientes.value
-    .filter((t) => t.fecha && t.fecha <= hoy)
-    .sort((a, b) => a.fecha.localeCompare(b.fecha)),
-)
+const deHoy = computed(() => pendientes.value.filter((t) => t.fecha && t.fecha <= hoy))
+// En el panel: lo atrasado, lo de hoy y lo de los próximos siete días.
+const enUnaSemana = sumarDias(hoy, 7)
+const paraPanel = computed(() => pendientes.value.filter((t) => t.fecha && t.fecha <= enUnaSemana))
 const atrasadas = computed(() => deHoy.value.filter((t) => t.fecha < hoy).length)
 const sinFecha = computed(() => pendientes.value.filter((t) => !t.fecha).length)
 const proximaTarea = computed(
-  () =>
-    pendientes.value
-      .filter((t) => t.fecha && t.fecha > hoy)
-      .sort((a, b) => a.fecha.localeCompare(b.fecha))[0] || null,
+  () => pendientes.value.filter((t) => t.fecha > enUnaSemana).sort(porFecha)[0] || null,
 )
 const permisosDe = (t) => permisosEn(t.huertoReal, user.value.uid)
 const plantaDe = (t) => (cultivos.value[t.orchardId] || []).find((c) => c.id === t.cropId)?.nombre || ''
@@ -252,17 +256,13 @@ const resumen = computed(() => {
   return partes.length ? partes.join(' y ') : 'Sin tareas pendientes para hoy'
 })
 
-async function completar(t) {
-  error.value = ''
-  try {
-    await updateTarea(t.orchardId, t.id, { completada: true })
-  } catch (e) {
-    error.value = mensajeError(e, 'No se pudo completar la tarea.')
-    console.error(e)
-    return
-  }
-  if (permisosDe(t).publishPosts) await autopublicarTarea(t.orchardId, t.titulo, user.value)
-}
+const aviso = ref('')
+const { alternar, cambiarFrecuencia, borrar } = useAccionesTarea({
+  orchardIdDe: (t) => t.orchardId,
+  permisosDe,
+  error,
+  aviso,
+})
 
 /* --- Cosechas --- */
 const conEstado = computed(() =>
@@ -546,9 +546,6 @@ async function remove(id) {
 }
 .pie-seccion {
   margin: 8px 0 0;
-}
-.lista-tareas :deep(.tarea:first-child) {
-  border-top: none;
 }
 .vacio-seccion {
   display: flex;

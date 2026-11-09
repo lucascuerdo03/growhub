@@ -7,6 +7,7 @@
 //
 // Las fotos y sus créditos vienen de cropsPhotos.json (ver scripts/verificar-fotos.mjs).
 import FOTOS from './cropsPhotos.json'
+import { frecuenciaDeRiego } from '../utils/tareas'
 
 // Plagas y enfermedades, con un tratamiento ecológico.
 const P = {
@@ -308,15 +309,19 @@ export function textoCosecha(c) {
   return `${min}–${max} días`
 }
 
-// Tareas que se ofrecen al añadir un cultivo. `dias` es cuándo tocan desde hoy.
+// Tareas que se ofrecen al añadir un cultivo. `dias` es cuándo tocan desde la
+// siembra y `frecuencia`, cada cuánto se repiten (ver utils/tareas.js).
 export function tareasRecomendadas(c) {
   const lista = []
   if (c.riego !== 'Sin riego') {
-    lista.push({ clave: 'riego', titulo: `Regar: ${c.riego.toLowerCase()}`, dias: 1, frecuenciaRiego: c.riego })
+    // Con frecuencia, el título no la repite: se muestra aparte y puede cambiarse.
+    const frecuencia = frecuenciaDeRiego(c.riego)
+    const titulo = frecuencia ? 'Regar' : `Regar: ${c.riego.toLowerCase()}`
+    lista.push({ clave: 'riego', titulo, dias: 1, frecuencia })
   }
-  lista.push({ clave: 'abonado', titulo: 'Abonar con compost', dias: c.perenne ? 60 : 21 })
+  lista.push({ clave: 'abonado', titulo: 'Abonar con compost', dias: c.perenne ? 60 : 21, frecuencia: c.perenne ? '' : 'mensual' })
   if (c.plagas[0]) {
-    lista.push({ clave: 'plagas', titulo: `Revisar plagas: ${c.plagas[0].nombre.toLowerCase()}`, dias: 14 })
+    lista.push({ clave: 'plagas', titulo: `Revisar plagas: ${c.plagas[0].nombre.toLowerCase()}`, dias: 14, frecuencia: 'semanal' })
   }
   c.extras.forEach((e, i) => lista.push({ clave: `extra-${i}`, titulo: e.titulo, dias: e.dias }))
   if (!c.perenne) {

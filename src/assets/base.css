@@ -101,6 +101,15 @@ textarea {
 }
 
 /* Transición al completar una tarea: se dibuja la marca y luego la fila se recoge. */
+/* Aviso al completar una tarea que se repite. */
+.aviso-tarea {
+  margin: 4px 0 8px;
+  padding: 8px 11px;
+  border-radius: var(--radius-sm);
+  background: #edf5ee;
+  color: var(--color-verde-oscuro);
+  font-size: 0.86rem;
+}
 .tarea-lista-move {
   transition: transform 0.3s ease;
 }

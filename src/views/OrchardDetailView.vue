@@ -51,7 +51,7 @@
           <Ilustracion tipo="huerto" />
           <p>Este huerto aún no tiene cultivos. Busca uno arriba para añadirlo.</p>
         </div>
-        <p v-else-if="!cultivosFiltrados.length" class="muted small">Ningún cultivo coincide con la búsqueda.</p>
+        <p v-else-if="search.trim() && !cultivosFiltrados.length" class="muted small">Ningún cultivo coincide con la búsqueda.</p>
 
         <div class="rejilla-cultivos">
           <CropCard
@@ -71,8 +71,8 @@
 
         <form v-if="permisos.manageTasks" class="inline-add task-add" @submit.prevent="addTask">
           <input v-model="taskTitulo" placeholder="Nueva tarea" />
-          <select v-model="taskFrec" aria-label="Frecuencia de riego">
-            <option v-for="f in FRECUENCIAS" :key="f" :value="f">{{ f }}</option>
+          <select v-model="taskFrec" aria-label="Se repite">
+            <option v-for="f in FRECUENCIAS" :key="f.valor" :value="f.valor">{{ f.texto }}</option>
           </select>
           <input v-model="taskFecha" type="date" aria-label="Fecha de la tarea" />
           <select v-model="taskCrop" aria-label="Planta de la tarea">
@@ -88,39 +88,22 @@
           <option v-for="c in cultivos" :key="c.id" :value="c.id">{{ c.nombre }}</option>
         </select>
 
-        <p class="group-label">Pendientes</p>
-        <div v-if="!pendientes.length" class="vacio compacto">
-          <Ilustracion tipo="tareas" />
-          <p>No hay tareas pendientes.</p>
-        </div>
-        <TransitionGroup name="tarea-lista" tag="div">
-          <TaskItem
-            v-for="t in pendientes"
-            :key="t.id"
-            :tarea="t"
-            :planta="plantaDe(t)"
-            :puede-completar="permisos.completeTasks"
-            :puede-borrar="permisos.manageTasks"
-            @toggle="toggleTask"
-            @remove="removeTask"
-          />
-        </TransitionGroup>
-
-        <button v-if="completadas.length" class="collapse" @click="showDone = !showDone">
-          Completadas ({{ completadas.length }})
-        </button>
-        <template v-if="showDone">
-          <TaskItem
-            v-for="t in completadas"
-            :key="t.id"
-            :tarea="t"
-            :planta="plantaDe(t)"
-            :puede-completar="permisos.completeTasks"
-            :puede-borrar="permisos.manageTasks"
-            @toggle="toggleTask"
-            @remove="removeTask"
-          />
-        </template>
+        <p v-if="avisoTarea" class="aviso-tarea" role="status">{{ avisoTarea }}</p>
+        <ListaTareas
+          :tareas="tareasFiltradas"
+          :planta-de="plantaDe"
+          :permisos-de="() => permisos"
+          @toggle="alternar"
+          @remove="borrar"
+          @frecuencia="cambiarFrecuencia"
+        >
+          <template #vacio>
+            <div class="vacio compacto">
+              <Ilustracion tipo="tareas" />
+              <p>No hay tareas pendientes.</p>
+            </div>
+          </template>
+        </ListaTareas>
       </section>
     </div>
 
@@ -176,9 +159,11 @@ import UserAvatar from '../components/UserAvatar.vue'
 import BuscadorCultivo from '../components/BuscadorCultivo.vue'
 import CropCard from '../components/CropCard.vue'
 import Ilustracion from '../components/Ilustracion.vue'
-import TaskItem from '../components/TaskItem.vue'
+import ListaTareas from '../components/ListaTareas.vue'
 import TiempoHuerto from '../components/TiempoHuerto.vue'
 import { hoyISO } from '../utils/fechas'
+import { FRECUENCIAS } from '../utils/tareas'
+import { useAccionesTarea } from '../composables/useAccionesTarea'
 import FormularioCultivo from '../components/FormularioCultivo.vue'
 import { nombreRol, mensajeError } from '../utils/permissions'
 import {
@@ -187,16 +172,12 @@ import {
   fuentePosts,
   deleteCultivo,
   createTarea,
-  updateTarea,
-  deleteTarea,
   createPost,
   deletePost,
-  autopublicarTarea,
   createFoto,
   limpiarFoto,
 } from '../services/firestoreService'
 
-const FRECUENCIAS = ['Sin riego', 'Diario', 'Cada 2-3 días', 'Semanal', 'Solo en sequía']
 
 const route = useRoute()
 const orchardId = route.params.id
@@ -213,11 +194,11 @@ const search = ref('')
 // Cultivo que se está añadiendo: { entrada, nombre }.
 const nuevo = ref(null)
 const taskTitulo = ref('')
-const taskFrec = ref('Cada 2-3 días')
+const taskFrec = ref('')
 const taskCrop = ref('')
 const taskFecha = ref(hoyISO())
 const filtroPlanta = ref('')
-const showDone = ref(false)
+const avisoTarea = ref('')
 const nuevoPost = ref('')
 const postFoto = ref('')
 const publicando = ref(false)
@@ -234,17 +215,17 @@ const cultivosFiltrados = computed(() => {
 })
 const cultivoDe = (t) => cultivos.value.find((c) => c.id === t.cropId)
 const plantaDe = (t) => cultivoDe(t)?.nombre || 'General'
-// Primero lo más urgente; las tareas sin fecha, al final.
-const porVencimiento = (a, b) => (a.fecha || '9999').localeCompare(b.fecha || '9999')
 const tareasFiltradas = computed(() => {
   if (!filtroPlanta.value) return tareas.value
   if (filtroPlanta.value === 'general') return tareas.value.filter((t) => !cultivoDe(t))
   return tareas.value.filter((t) => t.cropId === filtroPlanta.value)
 })
-const pendientes = computed(() =>
-  tareasFiltradas.value.filter((t) => !t.completada).sort(porVencimiento),
-)
-const completadas = computed(() => tareasFiltradas.value.filter((t) => t.completada))
+const { alternar, cambiarFrecuencia, borrar } = useAccionesTarea({
+  orchardIdDe: () => orchardId,
+  permisosDe: () => permisos.value,
+  error,
+  aviso: avisoTarea,
+})
 
 // Al filtrar por una planta, las tareas nuevas se proponen para esa planta.
 watch(filtroPlanta, (f) => {
@@ -283,7 +264,7 @@ async function addTask() {
   if (!titulo) return
   const datos = {
     titulo,
-    frecuenciaRiego: taskFrec.value,
+    frecuencia: taskFrec.value,
     cropId: taskCrop.value || null,
     fecha: taskFecha.value,
   }
@@ -302,31 +283,6 @@ async function addTask() {
   }
 }
 
-async function toggleTask(t) {
-  const nuevo = !t.completada
-  error.value = ''
-  try {
-    await updateTarea(orchardId, t.id, { completada: nuevo })
-  } catch (e) {
-    error.value = mensajeError(e, 'No se pudo actualizar la tarea.')
-    console.error(e)
-    return
-  }
-  if (nuevo && permisos.value.publishPosts) {
-    await autopublicarTarea(orchardId, t.titulo, user.value)
-  }
-}
-
-async function removeTask(t) {
-  if (!confirm('¿Eliminar esta tarea?')) return
-  error.value = ''
-  try {
-    await deleteTarea(orchardId, t.id)
-  } catch (e) {
-    error.value = mensajeError(e, 'No se pudo eliminar la tarea.')
-    console.error(e)
-  }
-}
 
 async function publicar() {
   if (!nuevoPost.value.trim()) return
@@ -544,28 +500,6 @@ async function removePost(p) {
   height: 300px;
   border-radius: var(--radius-md);
   margin-top: 10px;
-}
-.group-label {
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-text-soft);
-  margin: 8px 0 10px;
-}
-.collapse {
-  width: 100%;
-  text-align: left;
-  background: transparent;
-  border: none;
-  border-top: 1px solid var(--color-border-soft);
-  padding: 12px 0 0;
-  margin-top: 6px;
-  color: var(--color-text-soft);
-  font-weight: 700;
-  font-size: 0.82rem;
-  text-transform: uppercase;
-  cursor: pointer;
 }
 /* Cuaderno de campo */
 .notebook {

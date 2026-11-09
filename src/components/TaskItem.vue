@@ -18,7 +18,14 @@
         <span v-if="tarea.fecha && !tarea.completada" class="fecha">{{ textoVencimiento(tarea.fecha, hoy) }}</span>
         <router-link v-if="huerto" :to="`/orchard/${huerto.id}`" class="enlace">{{ huerto.nombre }}</router-link>
         <span v-if="planta">{{ planta }}</span>
-        <span v-if="tarea.frecuenciaRiego" class="riego">Riego: {{ tarea.frecuenciaRiego }}</span>
+        <span v-if="tarea.completada && tarea.completadaEl">Hecha el {{ fechaCorta(tarea.completadaEl) }}</span>
+        <label v-if="puedeEditar && !tarea.completada" class="frecuencia editable">
+          <Repeat :size="12" aria-hidden="true" />
+          <select :value="frecuencia?.valor || ''" :aria-label="`Frecuencia de ${tarea.titulo}`" @change="$emit('frecuencia', tarea, $event.target.value)">
+            <option v-for="f in FRECUENCIAS" :key="f.valor" :value="f.valor">{{ f.texto }}</option>
+          </select>
+        </label>
+        <span v-else-if="frecuencia" class="frecuencia"><Repeat :size="12" aria-hidden="true" /> {{ frecuencia.texto }}</span>
       </div>
     </div>
     <button v-if="puedeBorrar" type="button" class="borrar" :aria-label="`Eliminar ${tarea.titulo}`" @click="$emit('remove', tarea)">
@@ -29,8 +36,9 @@
 
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { X } from 'lucide-vue-next'
-import { hoyISO, textoVencimiento } from '../utils/fechas'
+import { Repeat, X } from 'lucide-vue-next'
+import { fechaCorta, hoyISO, textoVencimiento } from '../utils/fechas'
+import { FRECUENCIAS, frecuenciaDe } from '../utils/tareas'
 
 const props = defineProps({
   tarea: { type: Object, required: true },
@@ -39,8 +47,11 @@ const props = defineProps({
   huerto: { type: Object, default: null },
   puedeCompletar: { type: Boolean, default: true },
   puedeBorrar: { type: Boolean, default: false },
+  // Cambiar la frecuencia o dejar de repetirla (permiso de gestionar tareas).
+  puedeEditar: { type: Boolean, default: false },
 })
-const emit = defineEmits(['toggle', 'remove'])
+const emit = defineEmits(['toggle', 'remove', 'frecuencia'])
+const frecuencia = computed(() => frecuenciaDe(props.tarea))
 
 // La marca se dibuja al pulsar, antes de que la lista saque la tarea (ver
 // .tarea-lista-* en base.css). Si la escritura falla, vuelve a su estado real.
@@ -150,6 +161,30 @@ const atrasada = computed(() => !props.tarea.completada && props.tarea.fecha && 
 }
 .atrasada .fecha {
   color: var(--color-danger);
+}
+.frecuencia {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.frecuencia.editable {
+  position: relative;
+  color: var(--color-text-soft);
+}
+.frecuencia select {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 0 2px;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.frecuencia select:hover,
+.frecuencia select:focus-visible {
+  color: var(--color-primary);
 }
 .enlace {
   color: inherit;

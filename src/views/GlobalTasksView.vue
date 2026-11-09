@@ -16,8 +16,8 @@
           <option v-for="c in cultivosDe(orchardId)" :key="c.id" :value="c.id">{{ c.nombre }}</option>
         </select>
         <input v-model="fecha" class="fecha" type="date" aria-label="Fecha de la tarea" />
-        <select v-model="frecuenciaRiego" aria-label="Frecuencia de riego">
-          <option v-for="f in FRECUENCIAS" :key="f" :value="f">{{ f }}</option>
+        <select v-model="frecuencia" aria-label="Se repite">
+          <option v-for="f in FRECUENCIAS" :key="f.valor" :value="f.valor">{{ f.texto }}</option>
         </select>
         <button type="submit" :disabled="saving || !titulo.trim()">Añadir</button>
       </div>
@@ -44,19 +44,19 @@
       <option v-for="o in opcionesPlanta" :key="o.valor" :value="o.valor">{{ o.etiqueta }}</option>
     </select>
     <p v-if="!tareasFiltradas.length" class="muted">No hay tareas para esta planta.</p>
-    <TransitionGroup name="tarea-lista" tag="div" class="list">
-      <TaskItem
-        v-for="t in tareasFiltradas"
-        :key="t.orchardId + t.id"
-        :tarea="t"
-        :planta="plantaDe(t)"
-        :huerto="{ id: t.orchardId, nombre: t.orchardNombre }"
-        :puede-completar="permisosDe(t).completeTasks"
-        :puede-borrar="permisosDe(t).manageTasks"
-        @toggle="toggle"
-        @remove="remove"
-      />
-    </TransitionGroup>
+    <p v-if="aviso" class="aviso-tarea" role="status">{{ aviso }}</p>
+    <ListaTareas
+      v-if="tareasFiltradas.length"
+      class="list"
+      :tareas="tareasFiltradas"
+      :clave-de="(t) => t.orchardId + t.id"
+      :planta-de="plantaDe"
+      :huerto-de="(t) => ({ id: t.orchardId, nombre: t.orchardNombre })"
+      :permisos-de="permisosDe"
+      @toggle="alternar"
+      @remove="borrar"
+      @frecuencia="cambiarFrecuencia"
+    />
     </template>
   </div>
 </template>
@@ -67,18 +67,15 @@ import { useAuth } from '../composables/useAuth'
 import { useHuertos, usePorHuerto } from '../composables/useHuertos'
 import { permisosEn, mensajeError } from '../utils/permissions'
 import { hoyISO } from '../utils/fechas'
-import TaskItem from '../components/TaskItem.vue'
+import { FRECUENCIAS } from '../utils/tareas'
+import { useAccionesTarea } from '../composables/useAccionesTarea'
+import ListaTareas from '../components/ListaTareas.vue'
 import Ilustracion from '../components/Ilustracion.vue'
 import {
   fuenteCultivos,
   fuenteTareas,
   createTarea,
-  updateTarea,
-  deleteTarea,
-  autopublicarTarea,
 } from '../services/firestoreService'
-
-const FRECUENCIAS = ['Sin riego', 'Diario', 'Cada 2-3 días', 'Semanal', 'Solo en sequía']
 
 const { user } = useAuth()
 const { huertos, listos } = useHuertos()
@@ -89,10 +86,11 @@ const cropId = ref('')
 const filtroPlanta = ref('')
 const titulo = ref('')
 const orchardId = ref(null)
-const frecuenciaRiego = ref('Cada 2-3 días')
+const frecuencia = ref('')
 const fecha = ref(hoyISO())
 const saving = ref(false)
 const error = ref('')
+const aviso = ref('')
 
 const nombreHuerto = (id) => huertos.value.find((h) => h.id === id)?.nombre || ''
 const tareas = computed(() =>
@@ -100,12 +98,6 @@ const tareas = computed(() =>
     .flatMap((h) =>
       (tareasPorHuerto.value[h.id] || []).map((t) => ({ ...t, orchardId: h.id, orchardNombre: h.nombre })),
     )
-    // Pendientes primero, por fecha; las tareas sin fecha y las hechas, al final.
-    .sort(
-      (a, b) =>
-        Number(!!a.completada) - Number(!!b.completada) ||
-        (a.fecha || '9999').localeCompare(b.fecha || '9999'),
-    ),
 )
 const huertosEditables = computed(() =>
   huertos.value.filter((h) => permisosEn(h, user.value.uid).manageTasks),
@@ -146,7 +138,7 @@ async function add() {
   const destino = orchardId.value
   const datos = {
     titulo: titulo.value.trim(),
-    frecuenciaRiego: frecuenciaRiego.value,
+    frecuencia: frecuencia.value,
     cropId: cropId.value || null,
     fecha: fecha.value,
   }
@@ -163,31 +155,12 @@ async function add() {
   }
 }
 
-async function toggle(t) {
-  const nuevo = !t.completada
-  error.value = ''
-  try {
-    await updateTarea(t.orchardId, t.id, { completada: nuevo })
-  } catch (e) {
-    error.value = mensajeError(e, 'No se pudo actualizar la tarea.')
-    console.error(e)
-    return
-  }
-  if (nuevo && permisosDe(t).publishPosts) {
-    await autopublicarTarea(t.orchardId, t.titulo, user.value)
-  }
-}
-
-async function remove(t) {
-  if (!confirm('¿Eliminar esta tarea?')) return
-  error.value = ''
-  try {
-    await deleteTarea(t.orchardId, t.id)
-  } catch (e) {
-    error.value = mensajeError(e, 'No se pudo eliminar la tarea.')
-    console.error(e)
-  }
-}
+const { alternar, cambiarFrecuencia, borrar } = useAccionesTarea({
+  orchardIdDe: (t) => t.orchardId,
+  permisosDe,
+  error,
+  aviso,
+})
 </script>
 
 <style scoped>
