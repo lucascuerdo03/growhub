@@ -34,9 +34,17 @@
 
     <fieldset v-if="tareas.length && puedeTareas" class="tareas">
       <legend>Crear también estas tareas</legend>
+      <div class="tareas-cabecera">
+        <span class="tareas-cuenta">{{ textoMarcadas }}</span>
+        <button type="button" class="enlace" :disabled="marcadas.length === tareas.length" @click="marcarTodas">Seleccionar todas</button>
+        <button type="button" class="enlace" :disabled="!marcadas.length" @click="marcadas = []">Ninguna</button>
+      </div>
       <label v-for="t in tareas" :key="t.clave" class="tarea">
         <input v-model="marcadas" type="checkbox" :value="t.clave" />
-        <span class="tarea-titulo">{{ t.titulo }}</span>
+        <span class="tarea-titulo">
+          {{ t.titulo }}
+          <span v-if="t.frecuenciaRiego" class="tarea-frecuencia">{{ t.frecuenciaRiego.toLowerCase() }}</span>
+        </span>
         <span class="tarea-fecha">{{ fechaCorta(fechaDe(t)) }}</span>
       </label>
     </fieldset>
@@ -83,7 +91,14 @@ const guardando = ref(false)
 const error = ref('')
 
 const tareas = computed(() => (props.entrada ? tareasRecomendadas(props.entrada) : []))
-const marcadas = ref(tareas.value.map((t) => t.clave))
+// Ninguna marcada de entrada: el usuario elige las que quiere.
+const marcadas = ref([])
+const marcarTodas = () => (marcadas.value = tareas.value.map((t) => t.clave))
+const textoMarcadas = computed(() => {
+  const n = marcadas.value.length
+  if (!n) return 'Ninguna seleccionada'
+  return n === 1 ? '1 seleccionada' : `${n} seleccionadas`
+})
 const puedeTareas = computed(
   () => permisosEn(props.huertos.find((h) => h.id === destino.value), user.value?.uid).manageTasks,
 )
@@ -189,9 +204,43 @@ select {
   padding: 4px 0;
   cursor: pointer;
 }
+.tareas-cabecera {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 2px 0 4px;
+  font-size: 0.8rem;
+}
+.tareas-cuenta {
+  flex: 1;
+  color: var(--color-text-soft);
+}
+.enlace {
+  background: transparent;
+  border: none;
+  padding: 2px 0;
+  color: var(--color-primary);
+  font-weight: 600;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.enlace:disabled {
+  color: var(--color-text-soft);
+  opacity: 0.6;
+  cursor: default;
+}
 .tarea-titulo {
   flex: 1;
   min-width: 0;
+}
+.tarea-frecuencia {
+  margin-left: 4px;
+  color: var(--color-text-soft);
+  font-size: 0.8rem;
+}
+.tarea-frecuencia::before {
+  content: '· ';
 }
 .tarea-fecha {
   color: var(--color-text-soft);
