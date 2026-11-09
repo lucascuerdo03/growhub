@@ -2,18 +2,27 @@ import { initializeApp } from 'firebase/app'
 import { getAuth, connectAuthEmulator } from 'firebase/auth'
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore'
 
-// `vite --mode emulator`: usa los emuladores locales de Firebase. El proyecto
-// demo-* no existe en la nube, así que las pruebas no pueden tocar datos reales.
-const usarEmuladores = import.meta.env.VITE_USE_EMULATORS === 'true'
+// `vite --mode emulator` (npm run dev:emu): usa los emuladores locales de Firebase.
+// El proyecto demo-* no existe en la nube, así que las pruebas no pueden tocar
+// datos reales, y no hace falta ninguna clave.
+const usarEmuladores = import.meta.env.MODE === 'emulator'
 
-const firebaseConfig = {
-  apiKey: 'AIzaSyDbF6rg4XEXf7vv944L1x-Tz7MQVKUs_zc',
-  authDomain: 'growhub-52432.firebaseapp.com',
-  projectId: usarEmuladores ? 'demo-growhub' : 'growhub-52432',
-  storageBucket: 'growhub-52432.firebasestorage.app',
-  messagingSenderId: '196568516536',
-  appId: '1:196568516536:web:b91747afe89673d901b14d',
-  measurementId: 'G-CJKQ237W47',
+// La configuración del proyecto real sale de .env (ver .env.example), que no se
+// sube al repositorio.
+const env = import.meta.env
+const firebaseConfig = usarEmuladores
+  ? { apiKey: 'demo', authDomain: 'demo-growhub.firebaseapp.com', projectId: 'demo-growhub' }
+  : {
+      apiKey: env.VITE_FIREBASE_API_KEY,
+      authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
+      projectId: env.VITE_FIREBASE_PROJECT_ID,
+      storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
+      messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+      appId: env.VITE_FIREBASE_APP_ID,
+    }
+
+if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+  console.error('Falta la configuración de Firebase: copia .env.example a .env y rellénalo (ver README).')
 }
 
 const app = initializeApp(firebaseConfig)

@@ -37,3 +37,29 @@ __screenshots__/
 
 # Vite
 *.timestamp-*-*.mjs
+
+# Variables de entorno y claves: nunca al repositorio (la plantilla sí)
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.key
+serviceAccount*.json
+*service-account*.json
+*firebase-adminsdk*.json
+credentials*.json
+.runtimeconfig.json
+
+# Firebase: caché de la CLI, datos exportados y registros de los emuladores
+.firebase/
+emulator-data/
+firebase-export-*/
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+database-debug.log*
+pubsub-debug.log*
+
+# Ajustes locales de Claude Code
+.claude/settings.local.json
