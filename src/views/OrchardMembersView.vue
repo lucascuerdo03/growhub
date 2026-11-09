@@ -63,7 +63,7 @@
         <h2>Invitar por email</h2>
         <p class="muted small">
           La persona verá la invitación al entrar en GrowHub con ese email, aunque aún no tenga
-          cuenta. Después puedes copiarle el enlace o enviárselo desde tu correo.
+          cuenta. Después puedes copiarle el enlace o compartirlo.
         </p>
         <form class="invite" @submit.prevent="invitar">
           <input v-model="email" type="email" placeholder="persona@email.com" aria-label="Email de la persona invitada" />
@@ -78,12 +78,13 @@
 
       <section v-if="pendientes.length" class="card">
         <h2>Invitaciones pendientes</h2>
+        <p class="muted small">Para aceptarla, la persona debe entrar o registrarse con el mismo email al que se envió la invitación.</p>
         <ul class="pending">
           <li v-for="inv in pendientes" :key="inv.id">
             <span>{{ inv.email }}</span>
             <span class="role">{{ nombreRol(inv.role) }}</span>
             <button class="link-btn" @click="copiarEnlace(inv)">Copiar enlace de invitación</button>
-            <a class="link-btn" :href="enlaceCorreo(inv)">Enviar por correo</a>
+            <button v-if="puedeCompartir" class="link-btn" @click="compartir(inv)">Compartir</button>
             <button
               v-if="permisos.admin || inv.invitedBy === user.uid"
               class="link-btn danger"
@@ -248,20 +249,24 @@ async function copiarEnlace(inv) {
   }
 }
 
-// Abre el correo del propio usuario: no hace falta ningún servicio de envío.
-function enlaceCorreo(inv) {
-  const asunto = `Te invito a mi huerto en GrowHub: ${huerto.value.nombre}`
-  const cuerpo = [
-    `Hola:`,
-    ``,
-    `${user.value.displayName || user.value.email} te ha invitado a "${huerto.value.nombre}" en GrowHub como ${nombreRol(inv.role).toLowerCase()}.`,
-    ``,
-    `Abre este enlace para aceptar la invitación:`,
-    enlaceDe(),
-    ``,
-    `Tienes que entrar o registrarte con este email: ${inv.email}.`,
-  ].join('\n')
-  return `mailto:${encodeURIComponent(inv.email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`
+// Menú de compartir del sistema (WhatsApp, Mensajes...). Solo existe en algunos
+// navegadores, sobre todo en móvil; donde no está, el botón no se muestra.
+const datosCompartir = (inv) => ({
+  title: 'Invitación a GrowHub',
+  text: `Te invito a mi huerto "${huerto.value.nombre}" en GrowHub. Entra o regístrate con ${inv.email} para aceptar la invitación:`,
+  url: enlaceDe(),
+})
+const puedeCompartir =
+  typeof navigator.share === 'function' &&
+  (typeof navigator.canShare !== 'function' || navigator.canShare({ title: 'GrowHub', text: 'GrowHub', url: location.origin }))
+
+async function compartir(inv) {
+  try {
+    await navigator.share(datosCompartir(inv))
+  } catch (e) {
+    // Cerrar el menú sin elegir nada no es un error.
+    if (e?.name !== 'AbortError') fallar(e, 'No se pudo compartir el enlace. Cópialo y envíalo tú.')
+  }
 }
 
 async function abandonar() {
