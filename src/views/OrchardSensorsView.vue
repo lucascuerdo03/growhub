@@ -16,6 +16,7 @@
       </select>
       <input v-model="deviceId" placeholder="Id. del nodo (ej: growhub-nodo-01)" aria-label="Identificador del nodo físico" />
       <button type="submit" :disabled="saving || !nombre.trim()">Añadir sensor</button>
+      <p class="ayuda-nodo">{{ AYUDA_NODO }}</p>
     </form>
 
     <p v-if="error" class="error">{{ error }}</p>
@@ -57,6 +58,7 @@
           </select>
           <label>Identificador del nodo</label>
           <input v-model="edicion.deviceId" placeholder="growhub-nodo-01" />
+          <p class="ayuda-nodo">{{ AYUDA_NODO }}</p>
           <div class="edit-actions">
             <button type="button" class="ghost" @click="edicion = null">Cancelar</button>
             <button type="submit" class="save" :disabled="!edicion.nombre.trim()">Guardar</button>
@@ -64,19 +66,28 @@
         </form>
 
         <div class="value" :style="{ color: SENSOR_TYPES[s.tipo]?.color }">
-          <template v-if="lastValue(s)">
-            {{ lastValue(s) }}<small>{{ s.unidad }}</small>
+          <template v-if="ultimaDe(s)">
+            {{ valorLectura(s, ultimaDe(s)) }}<small>{{ s.unidad }}</small>
           </template>
           <small v-else class="muted">Sin lecturas</small>
         </div>
+        <EstadoLectura v-if="ultimaDe(s)" :lectura="ultimaDe(s)" class="estado" />
 
         <SensorChart
           v-if="lecturasDe(s).length"
-          :lecturas="lecturasDe(s)"
+          :lecturas="conValores(s, lecturasDe(s))"
           :label="`${s.nombre} (${s.unidad})`"
           :color="SENSOR_TYPES[s.tipo]?.color"
         />
         <p v-else class="muted small">Añade una lectura para ver el histórico.</p>
+
+        <CalibracionHumedad
+          v-if="s.tipo === 'humedad'"
+          :orchard-id="orchardId"
+          :sensor="s"
+          :ultima="ultimaDe(s)"
+          :puede-editar="permisos.manageSensors"
+        />
 
         <button v-if="permisos.manageSensors" class="sim" :disabled="busy[s.id]" @click="simular(s)">
           {{ busy[s.id] ? 'Registrando…' : '+ Simular lectura' }}
@@ -96,6 +107,10 @@ import { mensajeError } from '../utils/permissions'
 import SensorChart from '../components/SensorChart.vue'
 import Ilustracion from '../components/Ilustracion.vue'
 import { SENSOR_TYPES, simularValor } from '../utils/sensorTypes'
+import { conValores, valorLectura } from '../utils/lecturas'
+import { RAW_MOJADO_DEFECTO, RAW_SECO_DEFECTO, calibracionCompleta } from '../utils/humedad'
+import EstadoLectura from '../components/EstadoLectura.vue'
+import CalibracionHumedad from '../components/CalibracionHumedad.vue'
 import {
   fuenteSensores,
   fuenteLecturas,
@@ -126,6 +141,12 @@ watch(
   (lista) => registrarNodos(orchardId, lista).catch((e) => console.warn('No se pudo registrar el nodo:', e)),
 )
 
+// RAW que daría un porcentaje con la calibración del sensor (o la del puente).
+function rawSimulado(pct, cal) {
+  const { seco, mojado } = calibracionCompleta(cal) ? cal : { seco: RAW_SECO_DEFECTO, mojado: RAW_MOJADO_DEFECTO }
+  return Math.round(seco - (pct / 100) * (seco - mojado))
+}
+
 const busy = reactive({}) // sensorId -> bool
 const nombre = ref('')
 const tipo = ref('temperatura')
@@ -153,10 +174,10 @@ const grupos = computed(() => {
     : conPlanta
 })
 
-function lastValue(s) {
-  const arr = lecturasDe(s)
-  return arr.length ? arr[arr.length - 1].valor : null
-}
+const ultimaDe = (s) => lecturasDe(s).at(-1) || null
+
+const AYUDA_NODO =
+  'Identificador del nodo físico: el mismo DEVICE_ID que usa el puente (bridge/.env). Déjalo vacío si el sensor no tiene nodo.'
 
 const ERROR_NODO = 'El identificador del nodo solo puede tener letras, números, "-" y "_".'
 
@@ -231,7 +252,10 @@ async function remove(s) {
 async function simular(s) {
   busy[s.id] = true
   try {
-    await addLectura(orchardId, s.id, simularValor(s.tipo))
+    const valor = simularValor(s.tipo)
+    // En humedad también un RAW coherente, para poder probar la calibración sin el nodo.
+    const extra = s.tipo === 'humedad' ? { raw: rawSimulado(valor, s.calibracion) } : {}
+    await addLectura(orchardId, s.id, valor, extra)
   } catch (e) {
     error.value = mensajeError(e, 'No se pudo registrar la lectura.')
     console.error(e)
@@ -257,6 +281,16 @@ h1 {
   gap: 10px;
   margin-bottom: 24px;
   flex-wrap: wrap;
+}
+.ayuda-nodo {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-soft);
+}
+.estado {
+  display: block;
+  margin: -4px 0 8px;
 }
 .add-bar input,
 .add-bar select {

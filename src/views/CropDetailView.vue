@@ -166,10 +166,11 @@
               <button v-if="permisos.manageSensors" class="unlink" title="Desvincular" @click="desvincular(s)">✕</button>
             </header>
             <div class="value" :style="{ color: SENSOR_TYPES[s.tipo]?.color }">
-              <template v-if="s.lecturas?.length">{{ s.lecturas.at(-1).valor }}<small>{{ s.unidad }}</small></template>
+              <template v-if="s.lecturas?.length">{{ valorLectura(s, s.lecturas.at(-1)) }}<small>{{ s.unidad }}</small></template>
               <small v-else class="muted">Sin lecturas</small>
             </div>
-            <SensorChart v-if="s.lecturas?.length" :lecturas="s.lecturas"
+            <EstadoLectura v-if="s.lecturas?.length" :lectura="s.lecturas.at(-1)" class="estado-lectura-metric" />
+            <SensorChart v-if="s.lecturas?.length" :lecturas="conValores(s, s.lecturas)"
                          :label="s.nombre" :color="SENSOR_TYPES[s.tipo]?.color" />
           </div>
         </div>
@@ -194,6 +195,8 @@ import { entradaDeCultivo, textoCosecha } from '../data/cropsLibrary'
 import { ETAPAS, estadoCultivo } from '../utils/cultivos'
 import { fechaCorta, hoyISO } from '../utils/fechas'
 import { SENSOR_TYPES } from '../utils/sensorTypes'
+import { conValores, valorLectura } from '../utils/lecturas'
+import EstadoLectura from '../components/EstadoLectura.vue'
 import { useHuerto } from '../composables/useHuertos'
 import { useVivo, useVivoMuchos } from '../composables/useVivo'
 import { mensajeError } from '../utils/permissions'
@@ -346,6 +349,10 @@ async function desvincular(s) {
 </script>
 
 <style scoped>
+.estado-lectura-metric {
+  display: block;
+  margin: -4px 0 8px;
+}
 .back {
   display: inline-block;
   margin-bottom: 14px;

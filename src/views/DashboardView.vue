@@ -102,7 +102,7 @@
                 <component :is="SENSOR_TYPES[l.tipo]?.icon" :size="18" :style="{ color: SENSOR_TYPES[l.tipo]?.color }" />
                 <div class="lectura-nombre">
                   <span>{{ l.nombre }}</span>
-                  <small>{{ l.lugar }} · {{ l.hace }}</small>
+                  <small>{{ l.lugar }} · <span :class="{ antigua: !l.reciente }">{{ l.reciente ? l.hace : `Sin datos recientes (${l.hace})` }}</span></small>
                 </div>
                 <strong>{{ l.valor }}&nbsp;<small>{{ l.unidad }}</small></strong>
               </li>
@@ -192,6 +192,8 @@ import TiempoHuerto from '../components/TiempoHuerto.vue'
 import { CROPS_LIBRARY, MESES_LARGOS, entradaDeCultivo, sePuedeSembrar } from '../data/cropsLibrary'
 import { estadoCultivo } from '../utils/cultivos'
 import { fotoDeHuerto } from '../utils/fotoHuerto'
+import { esReciente, haceTexto, msDe, valorLectura } from '../utils/lecturas'
+import { useAhora } from '../composables/useAhora'
 import { fechaCorta, hoyISO, mesActual, sumarDias } from '../utils/fechas'
 import { mensajeError, nombreRol, permisosEn, rolEn } from '../utils/permissions'
 import { SENSOR_TYPES } from '../utils/sensorTypes'
@@ -288,30 +290,25 @@ const sensores = computed(() =>
 const { porClave: lecturasPorClave } = useVivoMuchos(() =>
   sensores.value.map((s) => fuenteLecturas(s.orchardId, s.id)),
 )
-function hace(ts) {
-  const min = Math.max(0, Math.round((Date.now() - ts.toMillis()) / 60000))
-  if (min < 1) return 'ahora'
-  if (min < 60) return `hace ${min} min`
-  const h = Math.round(min / 60)
-  if (h < 24) return `hace ${h} h`
-  return `hace ${Math.round(h / 24)} d`
-}
+const ahora = useAhora()
 const lecturas = computed(() =>
   sensores.value
     .map((s) => {
       const clave = fuenteLecturas(s.orchardId, s.id).clave
       const ultima = (lecturasPorClave.value[clave] || []).at(-1)
-      if (!ultima?.createdAt) return null
+      const cuando = msDe(ultima)
+      if (cuando === null) return null
       const planta = (cultivos.value[s.orchardId] || []).find((c) => c.id === s.cropId)?.nombre
       return {
         clave,
         tipo: s.tipo,
         nombre: s.nombre,
         unidad: s.unidad,
-        valor: ultima.valor,
+        valor: valorLectura(s, ultima),
         lugar: planta || s.orchardNombre,
-        cuando: ultima.createdAt.toMillis(),
-        hace: hace(ultima.createdAt),
+        cuando,
+        hace: haceTexto(cuando, ahora.value),
+        reciente: esReciente(cuando, ahora.value),
       }
     })
     .filter(Boolean)
@@ -423,6 +420,10 @@ async function remove(id) {
 </script>
 
 <style scoped>
+.lecturas .antigua {
+  color: var(--color-tierra-oscuro);
+  font-weight: 600;
+}
 .portada {
   position: relative;
   display: flex;
