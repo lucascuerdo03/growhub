@@ -163,6 +163,13 @@ export const deleteHuerto = async (id) => {
   try {
     const sensores = await getDocs(sub('sensors'))
     await Promise.all(sensores.docs.map((s) => borrarDocs(sub('sensors', s.id, 'readings'))))
+    // Que el puente deje de escribir en sensores que ya no existen.
+    const conNodo = sensores.docs.filter((s) => deviceIdValido(s.get('deviceId')) && s.get('deviceId'))
+    if (conNodo.length) {
+      const batch = writeBatch(db)
+      conNodo.forEach((s) => batch.delete(entradaNodo(s.get('deviceId'), id, s.id)))
+      await batch.commit()
+    }
     for (const nombre of ['crops', 'tasks', 'posts', 'photos', 'sensors']) {
       await borrarDocs(sub(nombre))
     }
@@ -320,8 +327,18 @@ export const deleteCultivo = async (orchardId, cropId, fotoId = '') => {
 export const fuenteSensores = (orchardId) =>
   fuenteConsulta(`sensors:${orchardId}`, () => porFechaDesc(orchardId, 'sensors'))
 
+// Registro del nodo físico para el puente (bridge/): devices/{deviceId}/sensores/
+// {orchardId}_{sensorId}. Se mantiene en el mismo lote que el sensor.
+const entradaNodo = (deviceId, orchardId, sensorId) =>
+  doc(db, 'devices', deviceId, 'sensores', `${orchardId}_${sensorId}`)
+
+// Letras, números, "-" y "_": es el id de un documento y lo escribe el puente.
+export const deviceIdValido = (id) => !id || /^[\w-]{1,64}$/.test(id)
+
 export const createSensor = async (orchardId, { nombre, tipo, unidad, cropId = null, deviceId = '' }) => {
-  const ref = await addDoc(collection(db, 'orchards', orchardId, 'sensors'), {
+  const ref = doc(collection(db, 'orchards', orchardId, 'sensors'))
+  const batch = writeBatch(db)
+  batch.set(ref, {
     nombre,
     tipo,
     unidad,
@@ -329,22 +346,52 @@ export const createSensor = async (orchardId, { nombre, tipo, unidad, cropId = n
     deviceId,
     createdAt: serverTimestamp(),
   })
+  if (deviceId) batch.set(entradaNodo(deviceId, orchardId, ref.id), { orchardId, sensorId: ref.id })
+  await batch.commit()
   return ref.id
 }
 
-export const updateSensor = (orchardId, sensorId, data) =>
-  updateDoc(doc(db, 'orchards', orchardId, 'sensors', sensorId), data)
+// `deviceIdAnterior` solo hace falta si el cambio puede tocar el deviceId.
+export const updateSensor = async (orchardId, sensorId, data, deviceIdAnterior = '') => {
+  const ref = doc(db, 'orchards', orchardId, 'sensors', sensorId)
+  if (!('deviceId' in data) || data.deviceId === deviceIdAnterior) return updateDoc(ref, data)
+  const batch = writeBatch(db)
+  batch.update(ref, data)
+  if (deviceIdAnterior) batch.delete(entradaNodo(deviceIdAnterior, orchardId, sensorId))
+  if (data.deviceId) batch.set(entradaNodo(data.deviceId, orchardId, sensorId), { orchardId, sensorId })
+  return batch.commit()
+}
 
-export const deleteSensor = (orchardId, sensorId) =>
-  deleteDoc(doc(db, 'orchards', orchardId, 'sensors', sensorId))
+export const deleteSensor = (orchardId, sensorId, deviceId = '') => {
+  const batch = writeBatch(db)
+  batch.delete(doc(db, 'orchards', orchardId, 'sensors', sensorId))
+  if (deviceId) batch.delete(entradaNodo(deviceId, orchardId, sensorId))
+  return batch.commit()
+}
+
+// Sensores con deviceId creados antes de existir el registro: se registran al
+// abrir la página de sensores (una vez por sesión y sensor).
+const registrados = new Set()
+export async function registrarNodos(orchardId, sensores) {
+  const pendientes = sensores.filter(
+    (s) => s.deviceId && deviceIdValido(s.deviceId) && !registrados.has(`${s.deviceId}/${orchardId}_${s.id}`),
+  )
+  if (!pendientes.length) return
+  const batch = writeBatch(db)
+  pendientes.forEach((s) => batch.set(entradaNodo(s.deviceId, orchardId, s.id), { orchardId, sensorId: s.id }))
+  await batch.commit()
+  pendientes.forEach((s) => registrados.add(`${s.deviceId}/${orchardId}_${s.id}`))
+}
 
 /* ----------------------------- Lecturas ---------------------------- */
 // Histórico de lecturas: orchards/{id}/sensors/{sensorId}/readings
 
-export const addLectura = (orchardId, sensorId, valor) =>
+// Lectura manual ("Simular lectura"). Las del nodo las escribe el puente con la
+// misma forma, más `raw` en humedad y `origen` ('nodo', 'ttn' o 'demo').
+export const addLectura = (orchardId, sensorId, valor, extra = {}) =>
   addDoc(
     collection(db, 'orchards', orchardId, 'sensors', sensorId, 'readings'),
-    { valor, createdAt: serverTimestamp() },
+    { valor, ...extra, createdAt: serverTimestamp() },
   )
 
 // Últimas lecturas en orden cronológico (ascendente).

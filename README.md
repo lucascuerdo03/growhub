@@ -117,6 +117,16 @@ Requisitos: Java 21 o superior y la CLI de Firebase (`npm install -g firebase-to
 
 Los datos del emulador se borran al cerrarlo.
 
+## Sensor real (nodo ESP32)
+
+La carpeta [`bridge/`](bridge/README.md) contiene el puente que lleva las lecturas del nodo (LILYGO T3 con sensores de humedad de suelo, temperatura y luz) a Firestore:
+
+- por USB: `npm run bridge:serial`;
+- por The Things Network: `npm run bridge:ttn`;
+- simuladas, sin el nodo: `npm run bridge:demo`.
+
+Se instala con `npm run bridge:instalar` y necesita una clave de cuenta de servicio guardada fuera del repositorio. Todos los pasos están en [bridge/README.md](bridge/README.md).
+
 ## Estructura
 
 ```
@@ -128,6 +138,7 @@ src/
   data/         biblioteca de cultivos y créditos de las fotos
   utils/        fechas, permisos, frecuencias de tareas, compresión de imágenes
 public/biblioteca/   fotos de la biblioteca
+bridge/              puente entre el nodo de sensores y Firestore
 scripts/             pruebas de las reglas y verificación de las fotos
 firestore.rules      reglas de seguridad de Firestore
 ```

@@ -453,6 +453,51 @@ await permitido('el nuevo propietario lo ve con la consulta por ownerId', async 
 })
 await permitido('el nuevo propietario lo borra', () => deleteDoc(huertoRef(b, cedido)))
 
+console.log('\n--- Nodos físicos (devices) ---')
+const hn = await crearHuerto(a, 'Huerto con nodo')
+const nodo = `nodo-${sufijo}`
+const entrada = (u, deviceId, orchardId, sensorId) =>
+  doc(u.db, 'devices', deviceId, 'sensores', `${orchardId}_${sensorId}`)
+// Lo que hace createSensor(): el sensor y su entrada en un lote.
+function sensorConNodo(u, orchardId, deviceId, extra = {}) {
+  const s = doc(sub(u, orchardId, 'sensors'))
+  const batch = writeBatch(u.db)
+  batch.set(s, { nombre: 'Humedad', tipo: 'humedad', unidad: '%', cropId: null, deviceId })
+  batch.set(entrada(u, deviceId, orchardId, s.id), { orchardId, sensorId: s.id, ...extra })
+  return batch.commit().then(() => s.id)
+}
+let sensorNodo
+await permitido('crea un sensor con nodo y su entrada', async () => {
+  sensorNodo = await sensorConNodo(a, hn, nodo)
+})
+await rechazado('una entrada con campos de más', () => sensorConNodo(a, hn, nodo, { extra: 1 }))
+await rechazado('una entrada para un sensor con otro deviceId', () =>
+  setDoc(entrada(a, 'otro-nodo', hn, sensorNodo), { orchardId: hn, sensorId: sensorNodo }))
+await rechazado('una entrada cuyo id no coincide con sus datos', () =>
+  setDoc(entrada(a, nodo, hn, sensorNodo), { orchardId: id, sensorId: sensorNodo }))
+await rechazado('un ajeno apunta el nodo a un sensor de otro huerto', () =>
+  setDoc(entrada(c, nodo, hn, sensorNodo), { orchardId: hn, sensorId: sensorNodo }))
+await rechazado('un ajeno borra la entrada', () => deleteDoc(entrada(c, nodo, hn, sensorNodo)))
+await rechazado('nadie lee el registro desde la app', () => getDocs(collection(a.db, 'devices', nodo, 'sensores')))
+await permitido('cambia el deviceId del sensor y su entrada a la vez', () => {
+  const batch = writeBatch(a.db)
+  batch.update(doc(a.db, 'orchards', hn, 'sensors', sensorNodo), { deviceId: `${nodo}-b` })
+  batch.delete(entrada(a, nodo, hn, sensorNodo))
+  batch.set(entrada(a, `${nodo}-b`, hn, sensorNodo), { orchardId: hn, sensorId: sensorNodo })
+  return batch.commit()
+})
+await permitido('otro usuario usa el mismo nodo en su propio huerto', async () => {
+  const propio = await crearHuerto(c, 'Huerto de Carla')
+  await sensorConNodo(c, propio, nodo)
+})
+await permitido('borra el sensor y su entrada', () => {
+  const batch = writeBatch(a.db)
+  batch.delete(doc(a.db, 'orchards', hn, 'sensors', sensorNodo))
+  batch.delete(entrada(a, `${nodo}-b`, hn, sensorNodo))
+  return batch.commit()
+})
+await permitido('borrar una entrada que ya no existe no falla', () => deleteDoc(entrada(a, nodo, hn, sensorNodo)))
+
 console.log('\n--- Foto de perfil ---')
 await permitido('subir mi foto', () => setDoc(doc(a.db, 'userPhotos', a.uid), { data: 'data:image/jpeg;base64,AA' }))
 await rechazado('subir la foto de otro', () => setDoc(doc(b.db, 'userPhotos', a.uid), { data: 'x' }))

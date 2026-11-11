@@ -44,7 +44,7 @@
             <span v-if="s.deviceId" class="device">Nodo: {{ s.deviceId }}</span>
           </div>
           <button v-if="permisos.manageSensors" class="edit" @click="empezarEdicion(s)">Editar</button>
-          <button v-if="permisos.manageSensors" class="del" title="Eliminar" @click="remove(s.id)">✕</button>
+          <button v-if="permisos.manageSensors" class="del" title="Eliminar" @click="remove(s)">✕</button>
         </header>
 
         <form v-if="edicion?.id === s.id" class="edit-form" @submit.prevent="guardarEdicion(s)">
@@ -88,7 +88,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useHuerto } from '../composables/useHuertos'
 import { useVivo, useVivoMuchos } from '../composables/useVivo'
@@ -104,6 +104,8 @@ import {
   updateSensor,
   deleteSensor,
   addLectura,
+  deviceIdValido,
+  registrarNodos,
 } from '../services/firestoreService'
 
 const route = useRoute()
@@ -117,6 +119,12 @@ const { porClave } = useVivoMuchos(() =>
   huerto.value ? sensores.value.map((s) => fuenteLecturas(orchardId, s.id)) : [],
 )
 const lecturasDe = (s) => porClave.value[fuenteLecturas(orchardId, s.id).clave] || []
+
+// Sensores con nodo creados antes de existir el registro que usa el puente.
+watch(
+  () => (permisos.value.manageSensors ? sensores.value : []),
+  (lista) => registrarNodos(orchardId, lista).catch((e) => console.warn('No se pudo registrar el nodo:', e)),
+)
 
 const busy = reactive({}) // sensorId -> bool
 const nombre = ref('')
@@ -150,10 +158,16 @@ function lastValue(s) {
   return arr.length ? arr[arr.length - 1].valor : null
 }
 
+const ERROR_NODO = 'El identificador del nodo solo puede tener letras, números, "-" y "_".'
+
 async function add() {
   if (!nombre.value.trim()) return
-  saving.value = true
   error.value = ''
+  if (!deviceIdValido(deviceId.value.trim())) {
+    error.value = ERROR_NODO
+    return
+  }
+  saving.value = true
   const datos = {
     nombre: nombre.value.trim(),
     tipo: tipo.value,
@@ -191,19 +205,23 @@ async function guardarEdicion(s) {
     deviceId: edicion.value.deviceId.trim(),
   }
   error.value = ''
+  if (!deviceIdValido(cambios.deviceId)) {
+    error.value = ERROR_NODO
+    return
+  }
   edicion.value = null
   try {
-    await updateSensor(orchardId, s.id, cambios)
+    await updateSensor(orchardId, s.id, cambios, s.deviceId || '')
   } catch (e) {
     error.value = mensajeError(e, 'No se pudo guardar el sensor.')
     console.error(e)
   }
 }
 
-async function remove(id) {
+async function remove(s) {
   if (!confirm('¿Eliminar este sensor?')) return
   try {
-    await deleteSensor(orchardId, id)
+    await deleteSensor(orchardId, s.id, deviceIdValido(s.deviceId) ? s.deviceId || '' : '')
   } catch (e) {
     error.value = mensajeError(e, 'No se pudo eliminar el sensor.')
     console.error(e)

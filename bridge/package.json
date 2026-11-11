@@ -1,0 +1,21 @@
+{
+  "name": "growhub-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Puente entre el nodo de sensores de GrowHub (USB o The Things Network) y Firestore",
+  "type": "module",
+  "scripts": {
+    "serial": "node src/serial.js",
+    "ttn": "node src/ttn.js",
+    "demo": "node src/demo.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.10.0",
+    "mqtt": "^5.16.1",
+    "serialport": "^13.0.0"
+  }
+}

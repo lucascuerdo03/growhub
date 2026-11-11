@@ -10,7 +10,12 @@
     "preview": "vite preview",
     "emuladores": "firebase emulators:start --only auth,firestore --project demo-growhub",
     "test:reglas": "node scripts/test-rules.mjs",
-    "verificar:fotos": "node scripts/verificar-fotos.mjs"
+    "verificar:fotos": "node scripts/verificar-fotos.mjs",
+    "bridge:instalar": "npm --prefix bridge install",
+    "bridge:serial": "npm --prefix bridge run serial",
+    "bridge:ttn": "npm --prefix bridge run ttn",
+    "bridge:demo": "npm --prefix bridge run demo --",
+    "bridge:test": "npm --prefix bridge test"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",

@@ -97,6 +97,30 @@ service cloud.firestore {
             || esAdminDe(huertoDe(resource.data.orchardId)));
     }
 
+    // Nodos físicos: qué sensores de la app reciben las lecturas de cada nodo. La
+    // app crea una entrada al guardar un sensor con deviceId; el puente (bridge/)
+    // la lee con firebase-admin, que no pasa por estas reglas. El id de la entrada
+    // es "{orchardId}_{sensorId}" y el sensor tiene que llevar ese deviceId.
+    match /devices/{deviceId}/sensores/{entradaId} {
+      function huertoEntrada() {
+        return entradaId.split('_')[0];
+      }
+      function sensorEntrada() {
+        return entradaId.split('_')[1];
+      }
+      function gestionaSensores() {
+        return autenticado() && tienePermiso(huertoDe(huertoEntrada()), 'manageSensors');
+      }
+      allow create, update: if gestionaSensores()
+        && entradaId == huertoEntrada() + '_' + sensorEntrada()
+        && request.resource.data.keys().hasOnly(['orchardId', 'sensorId'])
+        && request.resource.data.orchardId == huertoEntrada()
+        && request.resource.data.sensorId == sensorEntrada()
+        && getAfter(/databases/$(database)/documents/orchards/$(huertoEntrada())/sensors/$(sensorEntrada()))
+             .data.get('deviceId', '') == deviceId;
+      allow delete: if gestionaSensores();
+    }
+
     match /orchards/{orchardId} {
       function propietarioActualiza() {
         let n = request.resource.data;
