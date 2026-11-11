@@ -2,7 +2,10 @@
   <div class="landing">
     <header class="nav">
       <div class="brand">GrowHub</div>
-      <div class="nav-actions">
+      <div v-if="conSesion" class="nav-actions">
+        <router-link to="/dashboard" class="btn-solid">Ir a mi panel</router-link>
+      </div>
+      <div v-else class="nav-actions">
         <router-link to="/login" class="btn-ghost">Iniciar sesión</router-link>
         <router-link to="/register" class="btn-solid">Registrarse</router-link>
       </div>
@@ -15,7 +18,10 @@
           Qué regar hoy, qué está a punto de cosecharse y qué toca sembrar este mes. Comparte el
           huerto con quien lo trabaja contigo y consulta más de cien cultivos con su calendario para España.
         </p>
-        <div class="hero-cta">
+        <div v-if="conSesion" class="hero-cta">
+          <router-link to="/dashboard" class="btn-solid big">Ir a mi panel</router-link>
+        </div>
+        <div v-else class="hero-cta">
           <router-link to="/register" class="btn-solid big">Crear cuenta</router-link>
           <router-link to="/login" class="btn-ghost big">Iniciar sesión</router-link>
         </div>
@@ -48,7 +54,7 @@
       </article>
     </section>
 
-    <section class="cta-band">
+    <section v-if="!conSesion" class="cta-band">
       <h2>¿Listo para empezar?</h2>
       <p>Crea tu cuenta y registra tu primer huerto en menos de un minuto.</p>
       <router-link to="/register" class="btn-solid big">Crear mi cuenta</router-link>
@@ -61,9 +67,14 @@
 </template>
 
 <script setup>
-// Página pública de entrada. Los usuarios ya logueados se redirigen al
-// dashboard desde el guard del router.
+// Página pública de entrada.
+import { computed } from 'vue'
 import { Sprout, Radio, ListChecks, BookOpen } from 'lucide-vue-next'
+import { useAuth } from '../composables/useAuth'
+
+// Con sesión solo se llega aquí con "atrás" desde la app (ver el guard del router).
+const { user } = useAuth()
+const conSesion = computed(() => !!user.value?.emailVerified)
 
 const FOTOS = ['/biblioteca/tomate-corazon.jpg', '/biblioteca/berenjena-listada.jpg', '/biblioteca/lechuga-roble.jpg']
 </script>

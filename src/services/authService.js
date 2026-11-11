@@ -56,6 +56,27 @@ export const authErrorMessage = (code) => {
     'auth/weak-password': 'La contraseña debe tener al menos 6 caracteres.',
     'auth/missing-password': 'Introduce una contraseña.',
     'auth/too-many-requests': 'Demasiados intentos. Inténtalo más tarde.',
+    'auth/network-request-failed': 'No hay conexión. Revisa tu red e inténtalo de nuevo.',
   }
   return map[code] || 'Ha ocurrido un error. Inténtalo de nuevo.'
+}
+
+// Campo del formulario al que corresponde cada error, para mostrarlo debajo; los
+// que no son de un campo concreto (credenciales, demasiados intentos) van aparte.
+export const campoDeError = (code) =>
+  ({
+    'auth/invalid-email': 'email',
+    'auth/user-not-found': 'email',
+    'auth/email-already-in-use': 'email',
+    'auth/user-disabled': 'email',
+    'auth/wrong-password': 'password',
+    'auth/weak-password': 'password',
+    'auth/missing-password': 'password',
+  })[code] || ''
+
+// Comprobaciones antes de llamar a Firebase. Devuelven el mensaje o ''.
+export const validarEmail = (email) => {
+  if (!email.trim()) return 'Escribe tu email.'
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return 'El email no es válido.'
+  return ''
 }

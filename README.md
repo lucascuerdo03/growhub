@@ -13,7 +13,7 @@ GrowHub es una aplicación web para gestionar huertos. Cada día muestra qué ha
   - Cada tarea puede tener fecha, cultivo y frecuencia: cada día, cada 2-3 días, semanal, cada 2 semanas o mensual.
   - Al completar una tarea que se repite, se crea la siguiente con la fecha calculada.
   - Las listas se agrupan en atrasadas, hoy, próximas y sin fecha, y las completadas quedan en un historial.
-- **Biblioteca de cultivos.** Tiene 112 variedades con foto, calendario de siembra, trasplante y cosecha, riego, marco de plantación, plagas y asociaciones, con búsqueda y filtros. Los créditos de las fotos están en `src/data/cropsPhotos.json`.
+- **Biblioteca de cultivos.** Tiene 112 variedades con foto, calendario de siembra, trasplante y cosecha, riego, marco de plantación, plagas y asociaciones, con búsqueda y filtros. Los créditos de las fotos están en `src/data/cropsPhotos.json`; la foto de huerto de las pantallas de acceso es de Angela Llop (Wikimedia Commons, CC BY-SA 2.0).
 - **Cuaderno de campo.** Cada huerto tiene un muro de notas con fotos, compartido con sus miembros. Al completar una tarea se publica una entrada automáticamente.
 - **Sensores.** Admite sensores de temperatura, humedad del suelo y luz, asociados a una planta y a un nodo físico (`deviceId`), con gráfica del histórico. La app también puede simular lecturas.
 - **Tiempo real.** Todas las listas se actualizan al momento en todas las sesiones abiertas.

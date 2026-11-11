@@ -67,9 +67,10 @@ onMounted(() => {
 
 const nombreVisible = computed(() => user.value?.displayName || user.value?.email || '')
 
+// Al salir, a la página principal; replace para que "atrás" no vuelva a la app.
 async function logout() {
   await logoutUser()
-  router.push('/login')
+  router.replace('/')
 }
 </script>
 

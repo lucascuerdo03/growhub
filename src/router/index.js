@@ -73,7 +73,7 @@ const router = createRouter({
 })
 
 // Guard global: controla sesión y verificación de email.
-router.beforeEach(async (to) => {
+router.beforeEach(async (to, from) => {
   const user = await waitForAuth()
   const verificado = !!user?.emailVerified
 
@@ -93,9 +93,15 @@ router.beforeEach(async (to) => {
     return true
   }
 
-  // Páginas de invitado (login/registro/recuperar): solo si no hay sesión válida.
-  if (to.meta.requiresGuest && user && verificado) return tomarDestino()
-  if (to.path === '/' && user && verificado) return '/dashboard'
+  // Entrar o registrarse con la sesión ya iniciada: a su panel, o a confirmar el
+  // email si aún no lo ha hecho.
+  if (to.meta.requiresGuest && user) {
+    if (verificado) return { path: tomarDestino(), replace: true }
+    if (to.path !== '/forgot-password') return { path: '/verify-email', replace: true }
+  }
+  // La página principal con sesión: al abrir la web se va directo al panel; si se
+  // llega con "atrás" desde la app, se muestra (con un acceso al panel).
+  if (to.path === '/' && user && verificado && !from.matched.length) return { path: '/dashboard', replace: true }
   return true
 })
 
