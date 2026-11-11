@@ -19,6 +19,13 @@
 
     <TiempoHuerto v-if="huerto" class="tiempo-huerto" :huerto="huerto" :enlace-ajustes="permisos.admin" />
 
+    <AvisosSensores
+      v-if="huerto"
+      :avisos="avisos"
+      :puede-crear-tareas="() => permisos.manageTasks"
+      :tareas-de="() => tareas"
+    />
+
     <p v-if="error" class="error">{{ error }}</p>
     <p v-if="!listo" class="muted">Cargando…</p>
     <p v-else-if="!huerto" class="error">
@@ -152,7 +159,8 @@ import { useRoute } from 'vue-router'
 import { X, Plus } from 'lucide-vue-next'
 import { useAuth } from '../composables/useAuth'
 import { useHuerto } from '../composables/useHuertos'
-import { useVivo } from '../composables/useVivo'
+import { useVivo, useVivoMuchos } from '../composables/useVivo'
+import { useAhora } from '../composables/useAhora'
 import ImageUpload from '../components/ImageUpload.vue'
 import StoredImage from '../components/StoredImage.vue'
 import UserAvatar from '../components/UserAvatar.vue'
@@ -160,6 +168,8 @@ import BuscadorCultivo from '../components/BuscadorCultivo.vue'
 import CropCard from '../components/CropCard.vue'
 import Ilustracion from '../components/Ilustracion.vue'
 import ListaTareas from '../components/ListaTareas.vue'
+import AvisosSensores from '../components/AvisosSensores.vue'
+import { avisosDe } from '../utils/avisos'
 import TiempoHuerto from '../components/TiempoHuerto.vue'
 import { hoyISO } from '../utils/fechas'
 import { FRECUENCIAS } from '../utils/tareas'
@@ -171,6 +181,8 @@ import {
   fuenteCultivos,
   fuenteTareas,
   fuentePosts,
+  fuenteSensores,
+  fuenteLecturas,
   deleteCultivo,
   createTarea,
   createPost,
@@ -189,6 +201,21 @@ const siHay = (fuente) => () => (huerto.value ? fuente(orchardId) : null)
 const { datos: cultivos } = useVivo(siHay(fuenteCultivos))
 const { datos: tareas } = useVivo(siHay(fuenteTareas))
 const { datos: posts, error: errorPosts } = useVivo(siHay(fuentePosts))
+// Sensores y sus últimas lecturas, para los avisos fuera de rango.
+const { datos: sensores } = useVivo(siHay(fuenteSensores))
+const { porClave: lecturasPorClave } = useVivoMuchos(() =>
+  huerto.value ? sensores.value.map((s) => fuenteLecturas(orchardId, s.id)) : [],
+)
+const ahora = useAhora()
+const avisos = computed(() =>
+  avisosDe({
+    orchardId,
+    cultivos: cultivos.value,
+    sensores: sensores.value,
+    lecturasDe: (s) => lecturasPorClave.value[fuenteLecturas(orchardId, s.id).clave] || [],
+    ahora: ahora.value,
+  }),
+)
 const error = ref('')
 // Foto propia o, si no hay, la del primer cultivo con foto o la genérica.
 const fotoCabecera = computed(() => fotoDeHuerto(huerto.value, cultivos.value))

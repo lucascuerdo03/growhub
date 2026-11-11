@@ -23,6 +23,13 @@
 
       <p v-if="error" class="error">{{ error }}</p>
 
+      <AvisosSensores
+        :avisos="avisos"
+        :con-huerto="lista.length > 1"
+        :puede-crear-tareas="(id) => permisosEn(lista.find((h) => h.id === id), user.uid).manageTasks"
+        :tareas-de="(id) => tareasPorHuerto[id] || []"
+      />
+
       <div v-if="invitaciones.length" class="notice">
         <span>
           Tienes {{ invitaciones.length }}
@@ -194,6 +201,8 @@ import { estadoCultivo } from '../utils/cultivos'
 import { fotoDeHuerto } from '../utils/fotoHuerto'
 import { esReciente, haceTexto, msDe, valorLectura } from '../utils/lecturas'
 import { useAhora } from '../composables/useAhora'
+import { avisosDe } from '../utils/avisos'
+import AvisosSensores from '../components/AvisosSensores.vue'
 import { fechaCorta, hoyISO, mesActual, sumarDias } from '../utils/fechas'
 import { mensajeError, nombreRol, permisosEn, rolEn } from '../utils/permissions'
 import { SENSOR_TYPES } from '../utils/sensorTypes'
@@ -291,6 +300,19 @@ const { porClave: lecturasPorClave } = useVivoMuchos(() =>
   sensores.value.map((s) => fuenteLecturas(s.orchardId, s.id)),
 )
 const ahora = useAhora()
+// Lecturas fuera del rango recomendado, en todos los huertos.
+const avisos = computed(() =>
+  lista.value.flatMap((h) =>
+    avisosDe({
+      orchardId: h.id,
+      huerto: h.nombre,
+      cultivos: cultivos.value[h.id] || [],
+      sensores: sensoresPorHuerto.value[h.id] || [],
+      lecturasDe: (s) => lecturasPorClave.value[fuenteLecturas(h.id, s.id).clave] || [],
+      ahora: ahora.value,
+    }),
+  ),
+)
 const lecturas = computed(() =>
   sensores.value
     .map((s) => {

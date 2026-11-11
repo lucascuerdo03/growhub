@@ -7,6 +7,12 @@
     <p v-else-if="!cultivo" class="error">Este cultivo ya no existe.</p>
 
     <template v-else>
+      <AvisosSensores
+        :avisos="avisos"
+        :puede-crear-tareas="() => permisos.manageTasks"
+        :tareas-de="() => todasTareas"
+      />
+
       <!-- Ficha -->
       <section class="card ficha">
         <StoredImage class="thumb" :orchard-id="orchardId" :foto-id="cultivo.fotoId" :url="cultivo.foto" :alt="cultivo.nombre">
@@ -136,6 +142,7 @@
       <!-- Sensores vinculados -->
       <section class="card">
         <h2 class="section-title">Sensores del cultivo</h2>
+        <RangosCultivo :orchard-id="orchardId" :cultivo="cultivo" :puede-editar="permisos.manageCrops" />
 
         <div v-if="permisos.manageSensors" class="link-row">
           <select v-model="sensorAVincular">
@@ -197,6 +204,10 @@ import { fechaCorta, hoyISO } from '../utils/fechas'
 import { SENSOR_TYPES } from '../utils/sensorTypes'
 import { conValores, valorLectura } from '../utils/lecturas'
 import EstadoLectura from '../components/EstadoLectura.vue'
+import AvisosSensores from '../components/AvisosSensores.vue'
+import RangosCultivo from '../components/RangosCultivo.vue'
+import { avisosDe } from '../utils/avisos'
+import { useAhora } from '../composables/useAhora'
 import { useHuerto } from '../composables/useHuertos'
 import { useVivo, useVivoMuchos } from '../composables/useVivo'
 import { mensajeError } from '../utils/permissions'
@@ -239,6 +250,18 @@ const sensores = computed(() =>
   })),
 )
 const sensoresCultivo = computed(() => sensores.value.filter((s) => s.cropId === cropId))
+const ahora = useAhora()
+const avisos = computed(() =>
+  cultivo.value
+    ? avisosDe({
+        orchardId,
+        cultivos: [cultivo.value],
+        sensores: sensoresCultivo.value,
+        lecturasDe: (s) => s.lecturas,
+        ahora: ahora.value,
+      })
+    : [],
+)
 // Sin planta, o de un cultivo que ya se ha borrado.
 const sensoresDisponibles = computed(() =>
   sensores.value.filter((s) => !cultivos.value.some((c) => c.id === s.cropId)),
