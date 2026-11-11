@@ -131,7 +131,7 @@
         <div class="huertos">
           <article v-for="h in huertos" :key="h.id" class="huerto">
             <router-link :to="`/orchard/${h.id}`" class="huerto-enlace">
-              <StoredImage class="huerto-foto" :orchard-id="h.id" :foto-id="h.fotoId" :url="h.imagen" :alt="h.nombre">
+              <StoredImage class="huerto-foto" :orchard-id="h.foto.orchardId" :foto-id="h.foto.fotoId" :url="h.foto.url" :alt="h.nombre">
                 <Sprout :size="30" />
               </StoredImage>
               <div class="huerto-datos">
@@ -191,6 +191,7 @@ import { useAccionesTarea } from '../composables/useAccionesTarea'
 import TiempoHuerto from '../components/TiempoHuerto.vue'
 import { CROPS_LIBRARY, MESES_LARGOS, entradaDeCultivo, sePuedeSembrar } from '../data/cropsLibrary'
 import { estadoCultivo } from '../utils/cultivos'
+import { fotoDeHuerto } from '../utils/fotoHuerto'
 import { fechaCorta, hoyISO, mesActual, sumarDias } from '../utils/fechas'
 import { mensajeError, nombreRol, permisosEn, rolEn } from '../utils/permissions'
 import { SENSOR_TYPES } from '../utils/sensorTypes'
@@ -224,6 +225,7 @@ const huertos = computed(() =>
     ...h,
     nCultivos: (cultivos.value[h.id] || []).length,
     nTareasPend: (tareasPorHuerto.value[h.id] || []).filter((t) => !t.completada).length,
+    foto: fotoDeHuerto(h, cultivos.value[h.id] || []),
   })),
 )
 
@@ -334,12 +336,10 @@ const paraSembrar = computed(() => {
 })
 
 /* --- Portada y tiempo --- */
+// La del primer huerto con foto propia; si ninguno la tiene, la automática del primero.
 const fotoPortada = computed(() => {
-  const h = lista.value.find((x) => x.fotoId || x.imagen)
-  if (h) return { orchardId: h.id, fotoId: h.fotoId || '', url: h.imagen || '' }
-  const c = conEstado.value.find((x) => x.fotoId || x.foto)
-  if (c) return { orchardId: c.orchardId, fotoId: c.fotoId || '', url: c.foto || '' }
-  return { orchardId: '', fotoId: '', url: paraSembrar.value[0]?.foto || '' }
+  const h = lista.value.find((x) => x.fotoId || x.imagen) || lista.value[0]
+  return fotoDeHuerto(h, h ? cultivos.value[h.id] || [] : [])
 })
 const conPin = computed(() => lista.value.filter((h) => h.lat != null))
 const idTiempo = ref(null)

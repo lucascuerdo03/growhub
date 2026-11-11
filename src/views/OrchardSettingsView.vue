@@ -25,6 +25,11 @@
           :foto-id="huerto.fotoId"
           :url="huerto.imagen"
         />
+        <div v-if="!tieneFotoPropia" class="foto-auto">
+          <StoredImage class="foto-auto-img" :orchard-id="fotoAuto.orchardId" :foto-id="fotoAuto.fotoId" :url="fotoAuto.url" alt="Foto automática del huerto" />
+          <p class="hint">{{ textoFotoAuto }}</p>
+        </div>
+        <p v-else class="hint">Si quitas tu foto, el huerto volverá a usar una automática.</p>
 
         <label>Ubicación</label>
         <p class="hint">Haz clic en el mapa para marcar la ubicación exacta.</p>
@@ -53,13 +58,17 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useHuerto } from '../composables/useHuertos'
 import { mensajeError } from '../utils/permissions'
 import LocationMap from '../components/LocationMap.vue'
 import ImageUpload from '../components/ImageUpload.vue'
+import StoredImage from '../components/StoredImage.vue'
+import { useVivo } from '../composables/useVivo'
+import { fotoDeHuerto } from '../utils/fotoHuerto'
 import {
+  fuenteCultivos,
   updateHuerto,
   deleteHuerto,
   resolverFoto,
@@ -79,6 +88,18 @@ const lng = ref(null)
 const saving = ref(false)
 const saved = ref(false)
 const error = ref('')
+
+// Sin foto propia (o al quitarla), se ve la que se usará en su lugar.
+const { datos: cultivos } = useVivo(() => (huerto.value ? fuenteCultivos(orchardId) : null))
+const tieneFotoPropia = computed(
+  () => !!foto.value || (!fotoQuitada.value && !!(huerto.value?.fotoId || huerto.value?.imagen)),
+)
+const fotoAuto = computed(() => fotoDeHuerto({ id: orchardId }, cultivos.value))
+const textoFotoAuto = computed(() =>
+  fotoAuto.value.origen === 'cultivo'
+    ? `Sin foto propia se usa la de ${fotoAuto.value.cultivo}, el primer cultivo que se añadió con foto. Puedes subir la tuya cuando quieras.`
+    : 'Sin foto propia ni cultivos con foto se usa una foto genérica de huerto. Puedes subir la tuya cuando quieras.',
+)
 
 function onPick({ lat: la, lng: ln }) {
   lat.value = la
@@ -176,6 +197,22 @@ textarea {
   font-size: 0.85rem;
   color: #6b7280;
   margin: 0 0 8px;
+}
+.foto-auto {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+.foto-auto-img {
+  flex-shrink: 0;
+  width: 120px;
+  height: 80px;
+  border-radius: var(--radius-sm);
+  background: var(--color-tierra-suave);
+}
+.foto-auto .hint {
+  margin: 0;
 }
 .coords {
   font-size: 0.9rem;

@@ -4,7 +4,7 @@
 
     <!-- Banner hero -->
     <section class="hero">
-      <StoredImage v-if="huerto?.fotoId || huerto?.imagen" class="hero-img" :orchard-id="orchardId" :foto-id="huerto.fotoId" :url="huerto.imagen" />
+      <StoredImage v-if="huerto" class="hero-img" :orchard-id="fotoCabecera.orchardId" :foto-id="fotoCabecera.fotoId" :url="fotoCabecera.url" />
       <div class="hero-overlay">
         <span v-if="permisos.rol" class="hero-badge">{{ nombreRol(permisos.rol) }}</span>
         <h1>{{ huerto?.nombre || 'Huerto' }}</h1>
@@ -163,6 +163,7 @@ import ListaTareas from '../components/ListaTareas.vue'
 import TiempoHuerto from '../components/TiempoHuerto.vue'
 import { hoyISO } from '../utils/fechas'
 import { FRECUENCIAS } from '../utils/tareas'
+import { fotoDeHuerto } from '../utils/fotoHuerto'
 import { useAccionesTarea } from '../composables/useAccionesTarea'
 import FormularioCultivo from '../components/FormularioCultivo.vue'
 import { nombreRol, mensajeError } from '../utils/permissions'
@@ -189,6 +190,8 @@ const { datos: cultivos } = useVivo(siHay(fuenteCultivos))
 const { datos: tareas } = useVivo(siHay(fuenteTareas))
 const { datos: posts, error: errorPosts } = useVivo(siHay(fuentePosts))
 const error = ref('')
+// Foto propia o, si no hay, la del primer cultivo con foto o la genérica.
+const fotoCabecera = computed(() => fotoDeHuerto(huerto.value, cultivos.value))
 
 const search = ref('')
 // Cultivo que se está añadiendo: { entrada, nombre }.
