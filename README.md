@@ -127,6 +127,10 @@ La carpeta [`bridge/`](bridge/README.md) contiene el puente que lleva las lectur
 
 Se instala con `npm run bridge:instalar` y necesita una clave de cuenta de servicio guardada fuera del repositorio. Todos los pasos están en [bridge/README.md](bridge/README.md).
 
+### Arranque con doble clic (macOS)
+
+[`scripts/arrancar-growhub.command`](scripts/arrancar-growhub.command) abre la Terminal con dos pestañas en la carpeta del proyecto: la app (`npm run dev`) y el puente (`caffeinate -i npm run bridge:serial`, para que el Mac no se duerma). Se puede copiar al Escritorio o crear allí un lanzador que lo ejecute. Para abrir la segunda pestaña, la Terminal necesita permiso de Accesibilidad (Ajustes del Sistema > Privacidad y seguridad > Accesibilidad); sin él, el puente se abre en una ventana aparte.
+
 ## Estructura
 
 ```
